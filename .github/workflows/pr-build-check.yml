@@ -9,6 +9,7 @@ on:
       - 'variants/**'
       - 'platformio.ini'
       - '.github/workflows/pr-build-check.yml'
+      - 'tool/meshnomad/**'
   push:
     branches: [main-meshnomad]
     paths:
@@ -17,6 +18,7 @@ on:
       - 'variants/**'
       - 'platformio.ini'
       - '.github/workflows/pr-build-check.yml'
+      - 'tool/meshnomad/**'
 
 jobs:
   build:
@@ -48,6 +50,7 @@ jobs:
           - Tbeam_SX1276_repeater
           # MeshNomad: repeater with the network layer
           - heltec_v4_mn_rpt
+          - RAK_4631_mn_rpt
 
     steps:
       - name: Clone Repo
@@ -58,3 +61,15 @@ jobs:
 
       - name: Build ${{ matrix.environment }}
         run: pio run -e ${{ matrix.environment }}
+
+  generated-envs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone Repo
+        uses: actions/checkout@v6
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build-environment
+
+      - name: Check MeshNomad generated envs
+        run: python3 tool/meshnomad/gen_envs.py --check

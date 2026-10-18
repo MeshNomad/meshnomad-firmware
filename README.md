@@ -33,6 +33,7 @@ listed below.
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
 | CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app). | 1.18.0 |
 | Network (ESP32 repeater) | Optional WiFi with a password-protected TCP console (port 5000), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
+| Firmware per role | One repeater firmware per board (`<board>_mn_rpt`); on ESP32 it contains the network layer (WiFi, TCP console, MQTT, NTP, observer — each off by default). Release builds have debug logging switched off. | 1.18.0 |
 
 ## Commands
 
