@@ -4,6 +4,14 @@
 #include "NetHooks.h"
 #include <time.h>
 #include <esp_sntp.h>
+#include <esp_idf_version.h>
+
+// ESP-IDF 5 (e.g. ESP32-C6 builds) renamed sntp_stop() to esp_sntp_stop().
+#if ESP_IDF_VERSION_MAJOR >= 5
+  #define NET_SNTP_STOP() esp_sntp_stop()
+#else
+  #define NET_SNTP_STOP() sntp_stop()
+#endif
 
 // Home Assistant discovery metric map; `field` matches the publishState() JSON keys.
 // opt: optional (NAN-able) Telemetry field, or nullptr for metrics always present.
@@ -161,7 +169,7 @@ bool NetServices::observerActive() const {
 // ---- SNTP (non-blocking, only while WiFi is connected) ----
 void NetServices::ntpStop() {
   if (_ntp_state != NTP_IDLE) {
-    sntp_stop();
+    NET_SNTP_STOP();
     _ntp_state = NTP_IDLE;
   }
 }
@@ -187,7 +195,7 @@ void NetServices::ntpLoop() {
       _ntp_state = NTP_SYNCED;
       _last_ntp_apply_ms = now;
     } else if (now - _ntp_wait_start_ms > 60000UL && _ntp_retries < 10) {
-      sntp_stop();
+      NET_SNTP_STOP();
       configTime(0, 0, _cfg.ntp_server);          // retry (DNS may not have been ready)
       _ntp_wait_start_ms = now;
       _ntp_retries++;
