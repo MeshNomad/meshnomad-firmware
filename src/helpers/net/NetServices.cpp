@@ -213,6 +213,41 @@ void NetServices::ntpLoop() {
 // ---- TCP console ----
 // Protocol: "Password: " -> password + "\n" -> "OK\r\n> " or "Denied\r\n" (closed);
 // each reply "  -> <reply>\r\n" followed by "> "; idle timeout 120 s.
+// Login rules: the password must be entered within 15 s of connecting; an empty
+// node password never matches; 3 failed logins lock that client IP out for
+// 5 minutes (it keeps getting "Denied" without the password being checked).
+static const unsigned long LOGIN_DEADLINE_MS = 15000UL;
+static const uint8_t       LOGIN_MAX_FAILS   = 3;
+static const unsigned long LOGIN_LOCKOUT_MS  = 300000UL;
+
+NetServices::LoginFail* NetServices::loginFailEntry(uint32_t ip, bool create) {
+  LoginFail* oldest = &_login_fail[0];
+  for (LoginFail& e : _login_fail) {
+    if (e.count > 0 && e.ip == ip) return &e;
+    if (e.count == 0 || e.last_ms < oldest->last_ms) oldest = &e;
+  }
+  if (!create) return nullptr;
+  *oldest = {ip, 0, millis()};
+  return oldest;
+}
+
+bool NetServices::isLockedOut(uint32_t ip) {
+  LoginFail* e = loginFailEntry(ip, false);
+  if (!e) return false;
+  if (millis() - e->last_ms >= LOGIN_LOCKOUT_MS) {   // expired: forget the failures
+    e->count = 0;
+    return false;
+  }
+  return e->count >= LOGIN_MAX_FAILS;
+}
+
+void NetServices::recordLoginFailure(uint32_t ip) {
+  LoginFail* e = loginFailEntry(ip, true);
+  if (millis() - e->last_ms >= LOGIN_LOCKOUT_MS) e->count = 0;
+  if (e->count < 255) e->count++;
+  e->last_ms = millis();
+}
+
 void NetServices::applyTcpState() {
   bool want = _wifi_started && _cfg.tcp_enabled;
   if (want && !_cli_listening) {
@@ -240,12 +275,15 @@ void NetServices::cliLoop() {
       _cli_authed = false;
       _cli_len = 0;
       _cli_last_activity = millis();
+      _cli_connected_at = _cli_last_activity;
+      _cli_ip = (uint32_t)_cli_client.remoteIP();
       _cli_client.print("Password: ");
     }
     return;
   }
 
-  if (millis() - _cli_last_activity > 120000UL) {
+  if (millis() - _cli_last_activity > 120000UL ||
+      (!_cli_authed && millis() - _cli_connected_at > LOGIN_DEADLINE_MS)) {
     cliReset();
     return;
   }
@@ -258,10 +296,13 @@ void NetServices::cliLoop() {
       _cli_line[_cli_len] = 0;
       if (!_cli_authed) {
         const char* pw = _console_password ? _console_password() : nullptr;
-        if (pw && strcmp(_cli_line, pw) == 0) {
+        if (!isLockedOut(_cli_ip) && pw && pw[0] && strcmp(_cli_line, pw) == 0) {
+          LoginFail* e = loginFailEntry(_cli_ip, false);
+          if (e) e->count = 0;
           _cli_authed = true;
           _cli_client.print("OK\r\n> ");
         } else {
+          recordLoginFailure(_cli_ip);
           _cli_client.print("Denied\r\n");
           cliReset();
           return;

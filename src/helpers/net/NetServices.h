@@ -111,6 +111,20 @@ private:
   char  _cli_line[160];
   int   _cli_len = 0;
   unsigned long _cli_last_activity = 0;
+  unsigned long _cli_connected_at = 0;
+  uint32_t      _cli_ip = 0;
+  // Failed logins per client IP: 3 failures lock that IP out for 5 minutes,
+  // other addresses are unaffected. Oldest entry is reused when full.
+  struct LoginFail {
+    uint32_t      ip;
+    uint8_t       count;
+    unsigned long last_ms;
+  };
+  static const int LOGIN_FAIL_SLOTS = 16;   // 16 x 12 B
+  LoginFail _login_fail[LOGIN_FAIL_SLOTS] = {};
+  LoginFail* loginFailEntry(uint32_t ip, bool create);
+  bool isLockedOut(uint32_t ip);
+  void recordLoginFailure(uint32_t ip);
   void applyTcpState();         // start/stop the listener to match the config
   void cliLoop();
   void cliReset();

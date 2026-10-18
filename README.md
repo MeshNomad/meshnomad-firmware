@@ -100,6 +100,16 @@ Roles: repeater on ESP32 boards. Everything here is off by default.
 | `net scan` | Lists WiFi networks in range (takes 2–3 s). | — | — |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*`, `obs.*` settings without a reboot. | — | — |
 
+Network console login (`tcp.enabled 1`): connect to port 5000 and type the node's admin
+password (the one set with `password <new>`).
+
+- The password must be typed within 15 seconds of connecting, otherwise the connection is closed.
+- An empty admin password is never accepted — set one first.
+- After 3 wrong passwords from one IP address, that address gets `Denied` for 5 minutes
+  (each new attempt restarts the 5 minutes); other addresses can still log in. The node
+  remembers up to 16 addresses.
+- An idle logged-in session is closed after 120 seconds.
+
 Example — join WiFi, open the network console, send telemetry, set the clock:
 
 ```
