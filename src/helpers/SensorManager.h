@@ -24,6 +24,8 @@ public:
   virtual bool setSettingValue(const char* name, const char* value) { return false; }
   virtual LocationProvider* getLocationProvider() { return NULL; }
   virtual bool isGPSDetected() const { return false; }
+  // MeshNomad: I2C addresses that ACK on the telemetry bus; -1 = no bus here
+  virtual int scanBus(uint8_t* found, int max_found) { return -1; }
 
   // Helper functions to manage setting by keys (useful in many places ...)
   const char* getSettingByKey(const char* key) {

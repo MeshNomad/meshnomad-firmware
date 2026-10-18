@@ -31,6 +31,7 @@ listed below.
 |---|---|---|
 | Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad`, e.g. `v1.18.0-meshnomad`; the number after the dot in the tag (`rpt-v1.18.0-meshnomad.2`) only counts our releases. | 1.18.0 |
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
+| CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app). | 1.18.0 |
 
 ## Commands
 
@@ -53,6 +54,24 @@ Example:
 ```
 get path.hash.mode
 set path.hash.mode 2
+```
+
+### Sensors and build info
+
+Roles: `sensor read` and `sensor scan` — repeater, room server; `get features` — all roles.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `sensor read` | Reads every sensor now and prints one value per line, channel first (`ch2 temp=21.3C`). | — | — |
+| `sensor scan` | Lists the I2C addresses that answer on the sensor bus — a quick wiring check. Prints `no I2C devices` when nothing answers. | — | — |
+| `get features` | Lists what this firmware build contains, e.g. `wifi mqtt ntp observer gps`; `none` when nothing extra. The MeshNomad app uses it to show only commands that exist. | — | — |
+
+Example:
+
+```
+sensor scan
+sensor read
+get features
 ```
 
 ## Versions

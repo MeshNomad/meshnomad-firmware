@@ -4,6 +4,8 @@
 #include "AdvertDataHelpers.h"
 #include "TxtDataHelpers.h"
 #include <RTClib.h>
+#include <helpers/sensors/LPPDataHelpers.h>
+#include <helpers/MeshNomadFeatures.h>
 
 #ifndef BRIDGE_MAX_BAUD
 #define BRIDGE_MAX_BAUD 115200
@@ -297,6 +299,48 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
               solar_state,
               _board->isExternalPowered() ? "yes" : "no",
               _board->isChargerActive() ? "yes" : "no");
+    } else if (strcmp(command, "sensor read") == 0) {
+      // MeshNomad: live-read all telemetry sensors and print decoded values
+      CayenneLPP lpp(160);
+      lpp.reset();
+      _sensors->querySensors(0xFF, lpp);
+      LPPReader r(lpp.getBuffer(), lpp.getSize());
+      char* dp = reply;
+      uint8_t ch, type;
+      int n = 0;
+      while (r.readHeader(ch, type) && (dp - reply) < 128) {  // longest line 31 chars; reply buffers are 160
+        float a = 0, b = 0, c = 0;
+        switch (type) {
+          case LPP_TEMPERATURE:         r.readTemperature(a);      dp += sprintf(dp, "ch%d temp=%.1fC\n", (int)ch, a); break;
+          case LPP_RELATIVE_HUMIDITY:   r.readRelativeHumidity(a); dp += sprintf(dp, "ch%d hum=%.1f%%\n", (int)ch, a); break;
+          case LPP_BAROMETRIC_PRESSURE: r.readPressure(a);         dp += sprintf(dp, "ch%d pres=%.1fhPa\n", (int)ch, a); break;
+          case LPP_VOLTAGE:             r.readVoltage(a);          dp += sprintf(dp, "ch%d V=%.2f\n", (int)ch, a); break;
+          case LPP_CURRENT:             r.readCurrent(a);          dp += sprintf(dp, "ch%d I=%.3fA\n", (int)ch, a); break;
+          case LPP_POWER:               r.readPower(a);            dp += sprintf(dp, "ch%d P=%.2fW\n", (int)ch, a); break;
+          case LPP_ALTITUDE:            r.readAltitude(a);         dp += sprintf(dp, "ch%d alt=%.0fm\n", (int)ch, a); break;
+          case LPP_GPS:                 r.readGPS(a, b, c);        dp += sprintf(dp, "ch%d gps=%.4f,%.4f\n", (int)ch, a, b); break;
+          default:                      r.skipData(type);          dp += sprintf(dp, "ch%d type%d\n", (int)ch, (int)type); break;
+        }
+        n++;
+      }
+      if (n == 0) {
+        strcpy(reply, "no sensor data");
+      } else if (dp > reply) {
+        *(dp - 1) = 0;  // trim trailing newline
+      }
+    } else if (strcmp(command, "sensor scan") == 0) {
+      // MeshNomad: list I2C addresses that ACK on the telemetry bus
+      uint8_t found[24];
+      int n = _sensors->scanBus(found, sizeof(found));
+      if (n < 0) {
+        strcpy(reply, "not supported");
+      } else if (n == 0) {
+        strcpy(reply, "> no I2C devices");
+      } else {
+        char* dp = reply;
+        dp += sprintf(dp, "> %d:", n);
+        for (int i = 0; i < n; i++) dp += sprintf(dp, " 0x%02X", found[i]);
+      }
     } else if (memcmp(command, "sensor get ", 11) == 0) {
       const char* key = command + 11;
       const char* val = _sensors->getSettingByKey(key);
@@ -700,7 +744,11 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
 
 void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* reply) {
   const char* config = &command[4];
-  if (memcmp(config, "allow.read.only", 15) == 0) {
+  if (strcmp(config, "features") == 0) {  // MeshNomad: compiled-in features for the app
+    char list[96];
+    meshnomadFeatures(list, sizeof(list));
+    sprintf(reply, "> %s", list);
+  } else if (memcmp(config, "allow.read.only", 15) == 0) {
     sprintf(reply, "> %s", _prefs->allow_read_only ? "on" : "off");
   } else if (memcmp(config, "flood.advert.interval", 21) == 0) {
     sprintf(reply, "> %d", ((uint32_t) _prefs->flood_advert_interval));

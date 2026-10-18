@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #endif
 #include <Mesh.h>
+#include <helpers/MeshNomadFeatures.h>
 
 #define CMD_APP_START                 1
 #define CMD_SEND_TXT_MSG              2
@@ -2180,6 +2181,13 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     return true;
   }
 #endif
+
+  if (strcmp(command, "get features") == 0) {  // MeshNomad: compiled-in features for the app
+    char list[96];
+    meshnomadFeatures(list, sizeof(list));
+    sprintf(reply, "> %s", list);
+    return true;
+  }
 
   if (strcmp(command, "board") == 0) {
     strcpy(reply, board.getManufacturerName());

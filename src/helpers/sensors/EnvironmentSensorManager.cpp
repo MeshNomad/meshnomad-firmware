@@ -979,3 +979,14 @@ void EnvironmentSensorManager::loop() {
   #endif  // ENV_INCLUDE_BME680_BSEC
 }
 #endif // ENV_INCLUDE_GPS || ENV_INCLUDE_BME680_BSEC
+
+// MeshNomad: on-demand I2C scan for the `sensor scan` CLI command.
+int EnvironmentSensorManager::scanBus(uint8_t* found, int max_found) {
+  bool detected[128] = {};
+  scanI2CBus(TELEM_WIRE, detected);
+  int n = 0;
+  for (int a = 0x08; a < 0x78 && n < max_found; a++) {
+    if (detected[a]) found[n++] = (uint8_t)a;
+  }
+  return n;
+}
