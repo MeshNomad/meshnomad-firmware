@@ -1,4 +1,8 @@
 #include "MyMesh.h"
+
+#ifdef WITH_NET_SERVICES
+#include <helpers/net/NetHooks.h>
+#endif
 #include <algorithm>
 
 /* ------------------------------ Config -------------------------------- */
@@ -484,6 +488,9 @@ const char *MyMesh::getLogDateTime() {
 }
 
 void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
+#ifdef WITH_NET_SERVICES
+  net_observer_rx_raw(snr, rssi, raw, len);
+#endif
 #if MESH_PACKET_LOGGING
   Serial.print(getLogDateTime());
   Serial.print(" RAW: ");
@@ -1212,6 +1219,9 @@ void MyMesh::clearStats() {
 }
 
 void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply) {
+#ifdef WITH_NET_SERVICES
+  if (net_handle_cli(command, reply, 160)) return;
+#endif
   if (region_load_active) {
     if (StrHelper::isBlank(command)) {  // empty/blank line, signal to terminate 'load' operation
       region_map = temp_map;  // copy over the temp instance as new current map

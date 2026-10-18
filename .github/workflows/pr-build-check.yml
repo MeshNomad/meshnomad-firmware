@@ -46,6 +46,8 @@ jobs:
           - wio_wm1110_repeater
           # SX1276 (ESP32)
           - Tbeam_SX1276_repeater
+          # MeshNomad: repeater with the network layer
+          - heltec_v4_mn_rpt
 
     steps:
       - name: Clone Repo
