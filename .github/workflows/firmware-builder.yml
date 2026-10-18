@@ -10,6 +10,13 @@ on:
         required: true
         type: string
 
+# GitHub occasionally delivers a duplicate 'push' webhook for one tag push, firing this
+# workflow twice for the same ref; both runs would race on the release. Keyed on ref +
+# firmware_type so rpt/cmp/rs stay independent while true duplicates collapse.
+concurrency:
+  group: firmware-builder-${{ inputs.firmware_type }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   generate-build-matrix:
@@ -54,7 +61,7 @@ jobs:
 
       - name: Build Firmware
         env:
-          FIRMWARE_VERSION: ${{ env.GIT_TAG_VERSION }}
+          FIRMWARE_VERSION: ${{ env.FIRMWARE_VERSION_BASE }}
         run: /usr/bin/env bash build.sh build-firmware ${{ matrix.target }}
 
       - name: Upload Workflow Artifacts
@@ -84,7 +91,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          name: "${{ inputs.release_title_prefix }} ${{ env.GIT_TAG_VERSION }}"
-          body: ""
+          name: "${{ inputs.release_title_prefix }}-${{ env.GIT_TAG_VERSION }}"
+          generate_release_notes: true
           draft: true
           files: out/*

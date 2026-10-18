@@ -21,18 +21,24 @@ runs:
       run: |
         pip install --upgrade platformio
 
-    # a git tag of "room-server-v1.2.3" should set "v1.2.3" as GIT_TAG_VERSION
+    # Tag "rpt-v1.18.0-meshnomad.3": GIT_TAG_VERSION = "v1.18.0-meshnomad.3" (release title),
+    # FIRMWARE_VERSION_BASE = "v1.18.0-meshnomad" (compiled into the firmware; the release
+    # counter lives only in the tag). Branch builds use the branch name for both.
     - name: Extract Version from Git Tag
       shell: bash
       run: |
         if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-          # triggered by a tag push (e.g: refs/tags/companion-v1.2.3)
           GIT_TAG_NAME="${GITHUB_REF#refs/tags/}"
-          VERSION_STRING="${GIT_TAG_NAME##*-}"
+          VERSION_STRING="v${GIT_TAG_NAME#*-v}"
         else
-          # triggered by a workflow dispatch (e.g: refs/heads/main)
           # strip "refs/heads/" prefix and replace any remaining "/" with "-" to protect file paths
           BRANCH_NAME="${GITHUB_REF#refs/heads/}"
           VERSION_STRING=$(echo "$BRANCH_NAME" | tr '/' '-')
         fi
+        if [[ "${VERSION_STRING}" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+-meshnomad)\.[0-9]+$ ]]; then
+          FIRMWARE_VERSION_BASE="${BASH_REMATCH[1]}"
+        else
+          FIRMWARE_VERSION_BASE="${VERSION_STRING}"
+        fi
         echo "GIT_TAG_VERSION=${VERSION_STRING}" >> $GITHUB_ENV
+        echo "FIRMWARE_VERSION_BASE=${FIRMWARE_VERSION_BASE}" >> $GITHUB_ENV

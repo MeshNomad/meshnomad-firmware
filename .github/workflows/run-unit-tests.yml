@@ -3,8 +3,7 @@ name: Run Unit Tests
 on:
   push:
     branches:
-      - main
-      - master
+      - main-meshnomad
   pull_request:
   workflow_dispatch:
 
