@@ -30,6 +30,7 @@ listed below.
 | Area | What is different | Since |
 |---|---|---|
 | Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad`, e.g. `v1.18.0-meshnomad`; the number after the dot in the tag (`rpt-v1.18.0-meshnomad.2`) only counts our releases. | 1.18.0 |
+| Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
 
 ## Commands
 
@@ -38,7 +39,21 @@ serial console, in the MeshNomad app console, or as remote admin over LoRa.
 `get <key>` shows the current value, `set <key> <value>` changes and saves it.
 Every entry lists the values, the default and an example.
 
-_None yet._
+### Path hash
+
+Roles: repeater, room server, companion.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `get path.hash.mode` | Shows how many bytes of each node's hash this node writes into the path of the packets it sends. | — | — |
+| `set path.hash.mode <n>` | Changes it and saves it: `0` = 1 byte, `1` = 2 bytes, `2` = 3 bytes. Longer hashes tell nodes apart more reliably; shorter ones leave room for longer paths. A node that already has a saved setting keeps it. | `0`, `1`, `2` | `1` (MeshCore: `0`) |
+
+Example:
+
+```
+get path.hash.mode
+set path.hash.mode 2
+```
 
 ## Versions
 
