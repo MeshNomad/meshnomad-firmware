@@ -229,6 +229,10 @@ public:
   void handleCommand(uint32_t sender_timestamp, char* command, char* reply);
   void loop();
 
+  // Telemetry accessors for the network services (MQTT)
+  void getRepeaterStats(RepeaterStats& stats);
+  uint16_t getNeighbourCount();
+
 #if defined(WITH_BRIDGE)
   void setBridgeState(bool enable) override {
     if (enable == bridge.isRunning()) return;
