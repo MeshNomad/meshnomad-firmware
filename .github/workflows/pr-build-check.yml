@@ -50,7 +50,9 @@ jobs:
           - Tbeam_SX1276_repeater
           # MeshNomad: repeater with the network layer
           - heltec_v4_mn_rpt
-          - RAK_4631_mn_rpt
+          - Xiao_C3_mn_rpt
+          - heltec_v4_mn_cmp
+          - Xiao_C3_mn_cmp
 
     steps:
       - name: Clone Repo

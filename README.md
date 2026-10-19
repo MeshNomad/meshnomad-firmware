@@ -8,6 +8,24 @@ original as possible.
 > MeshCore itself, its documentation, community and official releases, go to
 > [meshcore-dev/MeshCore](https://github.com/meshcore-dev/MeshCore).
 
+## What you get
+
+MeshNomad firmware is MeshCore plus:
+
+- **One firmware per board and role, for ESP32 boards.** No choosing between Bluetooth, USB
+  and WiFi builds: everything is inside, and the extra features are switched on at runtime
+  from the MeshNomad app or the console.
+- **Network features:** WiFi, a password-protected network console, MQTT
+  telemetry with Home Assistant discovery, NTP clock sync and an MQTT packet observer.
+  All off until you switch them on.
+- **Sensor and build commands:** `sensor read`, `sensor scan`, and `get features`, which
+  lets the MeshNomad app show only the commands your firmware has.
+- **2-byte path hash by default** on a fresh install.
+
+The radio, the protocol and the routing are MeshCore's, so a MeshNomad node works with any
+MeshCore node in the same mesh. Details: [Differences from MeshCore](#differences-from-meshcore)
+and [Commands](#commands).
+
 ## Origin
 
 - Forked from `meshcore-dev/MeshCore`.
@@ -32,8 +50,8 @@ listed below.
 | Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>`, e.g. `v1.18.0-meshnomad.2`; the number after the dot counts our releases on that MeshCore version and starts again at 1 on the next one. | 1.18.0 |
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
 | CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app). | 1.18.0 |
-| Network (ESP32 repeater) | Optional WiFi with a password-protected TCP console (port 5000), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
-| Firmware per role | One repeater firmware per board (`<board>_mn_rpt`); on ESP32 it contains the network layer (WiFi, TCP console, MQTT, NTP, observer — each off by default). Release builds have debug logging switched off. | 1.18.0 |
+| Network (ESP32) | Optional WiFi with a password-protected TCP console (port 5000), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
+| Firmware per role | One firmware per ESP32 board and role: repeater `<board>_mn_rpt`, companion `<board>_mn_cmp` (Bluetooth, USB and WiFi at the same time, with MQTT and the observer, all off by default). Boards without WiFi, and boards that cannot hold a role's full feature set, get no MeshNomad firmware — see [Supported boards](#supported-boards). Release builds have debug logging switched off. | 1.18.0 |
 
 ## Commands
 
@@ -76,9 +94,12 @@ sensor read
 get features
 ```
 
-### Network (ESP32 repeater)
+### Network (ESP32)
 
-Roles: repeater on ESP32 boards. Everything here is off by default.
+Roles: repeater and companion on ESP32 boards. Everything here is off by default.
+On the companion, WiFi itself (`wifi.ssid`, `wifi.pwd`, `wifi.enabled`, …) is MeshCore's own and
+works as in MeshCore; this fork adds `wifi.power`, `mqtt.*`, `ntp.*`, `obs.*`, `net.telemetry`,
+`net status` and `net apply`. The companion has no `tcp.enabled` and no `net scan`.
 
 | Command | What it does | Values | Default |
 |---|---|---|---|
@@ -125,6 +146,41 @@ net apply
 net status
 ```
 
+## Supported boards
+
+MeshNomad firmware is released only for ESP32 boards — the network features need WiFi —
+and only where a board can hold the whole feature set of a role. Boards based on nRF52,
+RP2040 or STM32 get no MeshNomad firmware, and neither does an ESP32 board for a role it
+cannot hold; use the original [MeshCore firmware](https://github.com/meshcore-dev/MeshCore/releases)
+there.
+
+The MeshNomad app works with the original MeshCore firmware too: messaging, contacts,
+channels and the administration of repeaters and room servers work as with any MeshCore
+client. What such a node does not have is everything listed in [What you get](#what-you-get);
+the app recognises a MeshCore build and does not offer those commands.
+
+Repeater: every ESP32 board MeshCore releases a repeater for.
+
+Companion: every ESP32 board MeshCore releases a companion for, except:
+
+| Board | Why there is no MeshNomad companion |
+|---|---|
+| `Ebyte_EoRa-S3` | Bluetooth, USB, WiFi and the network layer do not fit in its flash |
+| `Heltec_v2` | Bluetooth, USB, WiFi and the network layer do not fit in its RAM |
+| `LilyGo_T3S3_sx1262` | do not fit in its flash |
+| `LilyGo_T3S3_sx1276` | do not fit in its flash |
+| `LilyGo_TBeam_1W` | do not fit in its flash |
+| `LilyGo_TLora_V2_1_1_6` | do not fit in its RAM |
+| `M5Stack_Unit_C6L` | do not fit in its flash |
+| `Meshadventurer_sx1262` | do not fit in its RAM |
+| `Meshadventurer_sx1268` | do not fit in its RAM |
+| `Station_G2` | even MeshCore's own Bluetooth companion does not fit in its flash |
+| `Station_G3_ESP32` | even MeshCore's own Bluetooth companion does not fit in its flash |
+| `Tbeam_SX1262` | do not fit in its RAM |
+| `Tbeam_SX1276` | do not fit in its RAM |
+| `ThinkNode_M2` | do not fit in its flash |
+| `ThinkNode_M5` | do not fit in its flash |
+
 ## Versions
 
 | Tag | Firmware reports | Meaning |
@@ -135,6 +191,9 @@ net status
 ## Building
 
 Same as MeshCore — PlatformIO, see the [MeshCore documentation](https://github.com/meshcore-dev/MeshCore/tree/main/docs).
+MeshNomad builds are the envs named `<board>_mn_<role>` (`rpt`, `cmp`), e.g.
+`pio run -e Heltec_v3_mn_rpt`. They are generated into `variants/meshnomad/platformio.ini`
+by `tool/meshnomad/gen_envs.py`; MeshCore's own envs stay available unchanged.
 
 ## Staying in sync
 

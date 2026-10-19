@@ -6,6 +6,9 @@
 #endif
 #include <Mesh.h>
 #include <helpers/MeshNomadFeatures.h>
+#ifdef WITH_NET_SERVICES
+#include <helpers/net/NetHooks.h>
+#endif
 
 #define CMD_APP_START                 1
 #define CMD_SEND_TXT_MSG              2
@@ -290,6 +293,9 @@ uint8_t MyMesh::getExtraAckTransmitCount() const {
 }
 
 void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
+#ifdef WITH_NET_SERVICES
+  net_observer_rx_raw(snr, rssi, raw, len);
+#endif
   if (_serial->isConnected() && len + 3 <= MAX_FRAME_SIZE) {
     int i = 0;
     out_frame[i++] = PUSH_CODE_LOG_RX_DATA;
@@ -2078,6 +2084,9 @@ void MyMesh::enterCLIRescue() {
 }
 
 bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char* reply) {
+#ifdef WITH_NET_SERVICES
+  if (net_handle_cli(command, reply, 160)) return true;
+#endif
   while (*command == ' ') command++; // skip leading spaces
 
   if (strlen(command) > 4 && command[2] == '|') { // optional prefix (for companion radio CLI)

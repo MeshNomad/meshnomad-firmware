@@ -2,6 +2,11 @@
 #include <Mesh.h>
 #include "MyMesh.h"
 
+#ifdef WITH_NET_SERVICES
+void meshnomad_net_setup();
+void meshnomad_net_loop();
+#endif
+
 // Believe it or not, this std C function is busted on some platforms!
 static uint32_t _atoi(const char* sp) {
   uint32_t n = 0;
@@ -286,11 +291,18 @@ void setup() {
   the_mesh.setListener(&ui_task);
 #endif
 
+#ifdef WITH_NET_SERVICES
+  meshnomad_net_setup();
+#endif
+
   board.onBootComplete();
 }
 
 void loop() {
   the_mesh.loop();
+#ifdef WITH_NET_SERVICES
+  meshnomad_net_loop();
+#endif
   interface_manager.loop();
   sensors.loop();
 #ifdef DISPLAY_CLASS
