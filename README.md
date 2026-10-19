@@ -29,7 +29,7 @@ listed below.
 
 | Area | What is different | Since |
 |---|---|---|
-| Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad`, e.g. `v1.18.0-meshnomad`; the number after the dot in the tag (`rpt-v1.18.0-meshnomad.2`) only counts our releases. | 1.18.0 |
+| Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>`, e.g. `v1.18.0-meshnomad.2`; the number after the dot counts our releases on that MeshCore version and starts again at 1 on the next one. | 1.18.0 |
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
 | CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app). | 1.18.0 |
 | Network (ESP32 repeater) | Optional WiFi with a password-protected TCP console (port 5000), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
@@ -129,7 +129,7 @@ net status
 
 | Tag | Firmware reports | Meaning |
 |---|---|---|
-| `rpt-v1.18.0-meshnomad.1` | `v1.18.0-meshnomad-<commit>` | first MeshNomad repeater release on MeshCore 1.18.0 |
+| `rpt-v1.18.0-meshnomad.1` | `v1.18.0-meshnomad.1-<commit>` | first MeshNomad repeater release on MeshCore 1.18.0 |
 | `cmp-v…`, `rs-v…` | same scheme | companion, room server |
 
 ## Building

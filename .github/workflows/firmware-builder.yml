@@ -61,7 +61,7 @@ jobs:
 
       - name: Build Firmware
         env:
-          FIRMWARE_VERSION: ${{ env.FIRMWARE_VERSION_BASE }}
+          FIRMWARE_VERSION: ${{ env.GIT_TAG_VERSION }}
         run: /usr/bin/env bash build.sh build-firmware ${{ matrix.target }}
 
       - name: Upload Workflow Artifacts
