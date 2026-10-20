@@ -133,6 +133,12 @@ static Adafruit_INA260 INA260;
 #define TELEM_INA226_SHUNT_VALUE 0.100
 #define TELEM_INA226_MAX_AMP     0.8
 #include <INA226.h>
+#if TELEM_INA226_ADDRESS != 0x40
+// MeshNomad: second probe for modules strapped to 0x40 (declared before the
+// default instance, whose variable name shadows the class name below).
+static INA226 INA226_ALT(0x40, TELEM_WIRE);
+#define MN_INA226_ALT 1
+#endif
 static INA226 INA226(TELEM_INA226_ADDRESS, TELEM_WIRE);
 #endif
 
@@ -409,6 +415,21 @@ static void query_ina226(uint8_t ch, uint8_t, CayenneLPP& lpp) {
   lpp.addCurrent(ch, INA226.getCurrent_mA() / 1000.0f);
   lpp.addPower(ch, INA226.getPower_mW() / 1000.0f);
 }
+#ifdef MN_INA226_ALT
+// MeshNomad: INA226 on 0x40 only if the die ID says so; otherwise the address
+// stays free for an INA219 (which has no ID registers).
+static uint8_t init_ina226_alt(TwoWire*, uint8_t) {
+  if (!INA226_ALT.begin()) return 0;
+  if (INA226_ALT.getManufacturerID() != 0x5449 || INA226_ALT.getDieID() != 0x2260) return 0;
+  INA226_ALT.setMaxCurrentShunt(TELEM_INA226_MAX_AMP, TELEM_INA226_SHUNT_VALUE);
+  return 1;
+}
+static void query_ina226_alt(uint8_t ch, uint8_t, CayenneLPP& lpp) {
+  lpp.addVoltage(ch, INA226_ALT.getBusVoltage());
+  lpp.addCurrent(ch, INA226_ALT.getCurrent_mA() / 1000.0f);
+  lpp.addPower(ch, INA226_ALT.getPower_mW() / 1000.0f);
+}
+#endif
 #endif
 
 #if ENV_INCLUDE_MLX90614
@@ -586,6 +607,12 @@ static const SensorDef SENSOR_TABLE[] = {
 #endif
 #if ENV_INCLUDE_INA3221
   { TELEM_INA3221_ADDRESS, "INA3221",      init_ina3221,  query_ina3221  },
+#if TELEM_INA3221_ADDRESS != 0x40
+  { 0x40,                  "INA3221",      init_ina3221,  query_ina3221  },  // MeshNomad: alternate address, ID-checked
+#endif
+#endif
+#if ENV_INCLUDE_INA226 && defined(MN_INA226_ALT)
+  { 0x40,                  "INA226",       init_ina226_alt, query_ina226_alt },  // MeshNomad: before INA219, die-ID checked
 #endif
 #if ENV_INCLUDE_INA219
   { TELEM_INA219_ADDRESS,  "INA219",       init_ina219,   query_ina219   },
