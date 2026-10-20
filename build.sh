@@ -299,5 +299,5 @@ elif [[ $1 == "get-companion-firmwares-to-build" ]]; then
 elif [[ $1 == "get-repeater-firmwares-to-build" ]]; then
   get_pio_envs_ending_with_string "_mn_rpt"
 elif [[ $1 == "get-room-server-firmwares-to-build" ]]; then
-  get_pio_envs_ending_with_string "_room_server"
+  get_pio_envs_ending_with_string "_mn_rs"
 fi

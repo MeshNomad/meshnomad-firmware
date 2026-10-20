@@ -3,6 +3,11 @@
 
 #include "MyMesh.h"
 
+#ifdef WITH_NET_SERVICES
+void meshnomad_net_setup();
+void meshnomad_net_loop();
+#endif
+
 #ifdef ETHERNET_ENABLED
   #define ETHERNET_CLI_BANNER "MeshCore Room Server CLI"
   #include <helpers/nrf52/EthernetCLI.h>
@@ -100,6 +105,10 @@ void setup() {
   the_mesh.sendSelfAdvertisement(16000, false);
 #endif
 
+#ifdef WITH_NET_SERVICES
+  meshnomad_net_setup();
+#endif
+
   board.onBootComplete();
 }
 
@@ -157,6 +166,9 @@ void loop() {
 #endif
 
   the_mesh.loop();
+#ifdef WITH_NET_SERVICES
+  meshnomad_net_loop();
+#endif
   sensors.loop();
 #ifdef DISPLAY_CLASS
   ui_task.loop();

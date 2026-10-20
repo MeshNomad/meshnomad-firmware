@@ -53,6 +53,8 @@ jobs:
           - Xiao_C3_mn_rpt
           - heltec_v4_mn_cmp
           - Xiao_C3_mn_cmp
+          - heltec_v4_mn_rs
+          - Xiao_C3_mn_rs
 
     steps:
       - name: Clone Repo
