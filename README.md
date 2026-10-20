@@ -195,13 +195,18 @@ Room server: every ESP32 board MeshCore releases a room server for.
 ## Building
 
 Same as MeshCore — PlatformIO, see the [MeshCore documentation](https://github.com/meshcore-dev/MeshCore/tree/main/docs).
-MeshNomad builds are the envs named `<board>_mn_<role>` (`rpt`, `cmp`), e.g.
+MeshNomad builds are the envs named `<board>_mn_<role>` (`rpt`, `cmp`, `rs`), e.g.
 `pio run -e Heltec_v3_mn_rpt`. They are generated into `variants/meshnomad/platformio.ini`
-by `tool/meshnomad/gen_envs.py`; MeshCore's own envs stay available unchanged.
+by `tool/meshnomad/gen_envs.py`. MeshCore's own envs for ESP32 boards stay available
+unchanged; the board variants without ESP32 are not part of this fork.
 
 ## Staying in sync
 
 - `main` mirrors MeshCore's `main` and never carries fork changes.
 - `main-meshnomad` is the fork's default branch; MeshCore releases are merged
   into it.
+- After each merge, run `tool/meshnomad/drop_unsupported.py`: it removes MeshCore's
+  board variants and board files that have no ESP32 build (this also settles the
+  merge conflicts on those files), and `--check` fails while any are present. Then
+  run `tool/meshnomad/gen_envs.py` for the release envs.
 - On a merge conflict in this `README.md`, keep this file.

@@ -19,10 +19,10 @@ Commands:
   build-room-server-firmwares: Build all chat room server firmwares for all build targets.
 
 Examples:
-Build firmware for the "RAK_4631_repeater" device target
-$ sh build.sh build-firmware RAK_4631_repeater
+Build firmware for the "heltec_v4_mn_rpt" device target
+$ sh build.sh build-firmware heltec_v4_mn_rpt
 
-Build all firmwares for device targets containing the string "RAK_4631"
+Build all firmwares for device targets containing the string "heltec_v4"
 $ sh build.sh build-matching-firmwares <build-match-spec>
 
 Build all companion firmwares
@@ -45,11 +45,11 @@ Examples:
 Build without debug logging:
 $ export FIRMWARE_VERSION=v1.0.0
 $ export DISABLE_DEBUG=1
-$ sh build.sh build-firmware RAK_4631_repeater
+$ sh build.sh build-firmware heltec_v4_mn_rpt
 
 Build with debug logging (default, uses flags from variant files):
 $ export FIRMWARE_VERSION=v1.0.0
-$ sh build.sh build-firmware RAK_4631_repeater
+$ sh build.sh build-firmware heltec_v4_mn_rpt
 EOF
 }
 
