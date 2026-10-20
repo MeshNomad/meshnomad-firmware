@@ -203,10 +203,14 @@ unchanged; the board variants without ESP32 are not part of this fork.
 ## Staying in sync
 
 - `main` mirrors MeshCore's `main` and never carries fork changes.
-- `main-meshnomad` is the fork's default branch; MeshCore releases are merged
-  into it.
-- After each merge, run `tool/meshnomad/drop_unsupported.py`: it removes MeshCore's
-  board variants and board files that have no ESP32 build (this also settles the
-  merge conflicts on those files), and `--check` fails while any are present. Then
-  run `tool/meshnomad/gen_envs.py` for the release envs.
+- `main-meshnomad` is the fork's default branch and the only one releases are
+  tagged from. It changes only through a pull request from `dev-meshnomad`, which
+  is then fast-forwarded, so a release is built from exactly the commit the checks
+  passed on.
+- `dev-meshnomad` is where work happens: every change and every MeshCore release
+  is merged there first.
+- After each MeshCore merge, run `tool/meshnomad/drop_unsupported.py`: it removes
+  MeshCore's board variants and board files that have no ESP32 build (this also
+  settles the merge conflicts on those files). Then run `tool/meshnomad/gen_envs.py`
+  for the release envs. The pull request check fails if either step was missed.
 - On a merge conflict in this `README.md`, keep this file.

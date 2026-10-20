@@ -7,15 +7,7 @@ on:
       - 'src/**'
       - 'examples/**'
       - 'variants/**'
-      - 'platformio.ini'
-      - '.github/workflows/pr-build-check.yml'
-      - 'tool/meshnomad/**'
-  push:
-    branches: [main-meshnomad]
-    paths:
-      - 'src/**'
-      - 'examples/**'
-      - 'variants/**'
+      - 'boards/**'
       - 'platformio.ini'
       - '.github/workflows/pr-build-check.yml'
       - 'tool/meshnomad/**'
@@ -61,3 +53,6 @@ jobs:
 
       - name: Check MeshNomad generated envs
         run: python3 tool/meshnomad/gen_envs.py --check
+
+      - name: Check for unsupported board code
+        run: python3 tool/meshnomad/drop_unsupported.py --check
