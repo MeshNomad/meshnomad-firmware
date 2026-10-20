@@ -85,7 +85,8 @@ def collect(envs: dict[str, dict]) -> dict[str, dict[str, str]]:
             continue
         for suffixes in SUFFIX.values():
             for suffix in suffixes:
-                if env.endswith(suffix):
+                # MeshCore's build.sh matches role suffixes regardless of case (`_Repeater`).
+                if env.lower().endswith(suffix):
                     boards.setdefault(env[: -len(suffix)], {})[suffix] = env
     return boards
 
