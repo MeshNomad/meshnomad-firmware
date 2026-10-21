@@ -2,8 +2,9 @@ name: Build Dev Firmware
 
 # Manual development builds from dev-meshnomad. Pick boards with the two lists or with
 # paths such as heltec/heltec_v4/rpt (see tool/meshnomad/dev_build.py, which also starts
-# this workflow from a terminal). Publishes one prerelease per role (tags dev-rpt, dev-cmp,
-# dev-rs), replacing the previous one. Release tags (rpt-/cmp-/rs-) stay on main-meshnomad.
+# this workflow from a terminal). Every run publishes its own prerelease per role, tagged
+# dev-<role>-<run number> (e.g. dev-cmp-57), version v1.18.0-meshnomad.dev.57-<commit>;
+# the newest 20 per role are kept. Release tags (rpt-/cmp-/rs-) stay on main-meshnomad.
 
 permissions:
   contents: write
@@ -139,7 +140,7 @@ jobs:
 
       - name: Build Firmware
         env:
-          FIRMWARE_VERSION: ${{ env.GIT_TAG_VERSION }}
+          FIRMWARE_VERSION: ${{ env.GIT_TAG_VERSION }}.${{ github.run_number }}
         run: /usr/bin/env bash build.sh build-firmware ${{ matrix.target }}
 
       - name: Upload Workflow Artifacts
@@ -164,16 +165,28 @@ jobs:
       - name: Publish one prerelease per role
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          KEEP=20
           for ROLE in rpt cmp rs; do
             FILES=(out/*_mn_${ROLE}-*)
             [ -e "${FILES[0]}" ] || continue
-            # e.g. heltec_v4_mn_rpt-v1.18.0-meshnomad.dev-abc1234.bin -> v1.18.0-meshnomad.dev-abc1234
+            # e.g. heltec_v4_mn_rpt-v1.18.0-meshnomad.dev.57-abc1234.bin -> v1.18.0-meshnomad.dev.57-abc1234
             VERSION=$(basename "${FILES[0]}" | sed -E "s/^.*_mn_${ROLE}-(v.*)(-merged)?\.bin$/\1/; s/-merged$//")
-            TAG="dev-${ROLE}"
-            gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
-            gh release create "$TAG" "${FILES[@]}" license.txt \
-              --target "$GITHUB_SHA" --prerelease \
-              --title "${ROLE^^}-${VERSION}" \
-              --notes "Development build ${VERSION} from dev-meshnomad. Not a release: it may be unstable, and the next dev build replaces it."
+            ENVS=$(for F in "${FILES[@]}"; do basename "$F" | sed -E 's/-v[0-9].*$//'; done | sort -u | tr '\n' ' ')
+            TAG="dev-${ROLE}-${RUN}"
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              # Re-run of the same run: same tag, replace its files.
+              gh release upload "$TAG" "${FILES[@]}" license.txt --clobber
+            else
+              gh release create "$TAG" "${FILES[@]}" license.txt \
+                --target "$GITHUB_SHA" --prerelease \
+                --title "DEV-${ROLE^^} #${RUN} ${VERSION}" \
+                --notes "Development build ${VERSION} from dev-meshnomad (${RUN_URL}). Not a release: it may be unstable. Firmware: ${ENVS}"
+            fi
+            # Keep the newest KEEP dev builds of this role; never touch any other tag.
+            gh release list --limit 200 --json tagName --jq '.[].tagName' \
+              | grep -E "^dev-${ROLE}-[0-9]+$" | sort -t- -k3 -n -r | tail -n +$((KEEP + 1)) \
+              | while read -r OLD; do gh release delete "$OLD" --cleanup-tag --yes; done
           done

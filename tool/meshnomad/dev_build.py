@@ -11,9 +11,9 @@ table in README.md, in lower case; ``all`` is the same as ``*``.
   dev_build.py --resolve --target T --role R [--paths P]
                                       print the matching envs as JSON (used by the workflow)
 
-The workflow builds what is pushed to origin/dev-meshnomad and publishes one prerelease per
-role (tags dev-rpt, dev-cmp, dev-rs), replacing the previous one. Needs ``gh`` logged in to
-an account with write access to the repository.
+The workflow builds what is pushed to origin/dev-meshnomad and publishes a prerelease per role
+for every run (tag dev-<role>-<run number>, e.g. dev-cmp-57; the newest 20 per role are kept).
+Needs ``gh`` logged in to an account with write access to the repository.
 """
 
 from __future__ import annotations
@@ -134,17 +134,17 @@ def dispatch(paths: list[str], yes: bool, watch: bool) -> int:
         return 1
     started = time.time()
     gh("workflow", "run", WORKFLOW, "--ref", BRANCH, "-f", f"paths={','.join(paths)}")
-    run_id = None
+    run_id = run_number = None
     for _ in range(30):
         time.sleep(2)
         runs = json.loads(
             gh("run", "list", "--workflow", WORKFLOW, "--branch", BRANCH, "--limit", "5",
-               "--json", "databaseId,createdAt,url")
+               "--json", "databaseId,number,createdAt,url")
         )
         fresh = [r for r in runs if created(r["createdAt"]) >= started - 5]
         if fresh:
-            run_id = str(fresh[0]["databaseId"])
-            print(f"run: {fresh[0]['url']}")
+            run_id, run_number = str(fresh[0]["databaseId"]), fresh[0]["number"]
+            print(f"run #{run_number}: {fresh[0]['url']}")
             break
     if run_id is None:
         print("started; the run did not show up yet - see the Actions tab")
@@ -155,7 +155,8 @@ def dispatch(paths: list[str], yes: bool, watch: bool) -> int:
     if result.returncode != 0:
         return result.returncode
     for role in sorted({env.rsplit("_mn_", 1)[1] for env in envs}):
-        print(gh("release", "view", f"dev-{role}", "--json", "url", "--jq", ".url").strip())
+        tag = f"dev-{role}-{run_number}"
+        print(gh("release", "view", tag, "--json", "url", "--jq", ".url").strip())
     return 0
 
 
