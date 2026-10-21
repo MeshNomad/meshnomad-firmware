@@ -15,9 +15,9 @@ MeshNomad firmware is MeshCore plus:
 - **One firmware per board and role, for ESP32 boards.** No choosing between Bluetooth, USB
   and WiFi builds: everything is inside, and the extra features are switched on at runtime
   from the MeshNomad app or the console.
-- **Network features:** WiFi, a password-protected network console, MQTT
-  telemetry with Home Assistant discovery, NTP clock sync and an MQTT packet observer.
-  All off until you switch them on.
+- **Network features:** WiFi, a password-protected network console (repeater, room
+  server), MQTT telemetry with Home Assistant discovery, NTP clock sync and an MQTT packet
+  observer. All off until you switch them on.
 - **Sensor and build commands:** `sensor read`, `sensor scan`, `get features`, which
   lets the MeshNomad app show only the commands your firmware has, and `get build`, which
   tells it which firmware file fits the device.
@@ -48,17 +48,24 @@ listed below.
 
 | Area | What is different | Since |
 |---|---|---|
-| Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>`, e.g. `v1.18.0-meshnomad.2`; the number after the dot counts our releases on that MeshCore version and starts again at 1 on the next one. | 1.18.0 |
+| Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>-<commit>`, e.g. `v1.18.0-meshnomad.2-9f3c2a1`; the number after `meshnomad.` counts our releases on that MeshCore version and starts again at 1 on the next one. Development builds report `v1.18.0-meshnomad.dev.<build>-<commit>` — see [Versions](#versions). | 1.18.0 |
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
 | CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app), `get build` (which firmware build this is, e.g. `heltec_v4_mn_rpt`). | 1.18.0 |
-| Network (ESP32) | Optional WiFi (repeater, room server: with a password-protected TCP console on port 5000; companion: MeshCore's own WiFi), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
+| Network (ESP32) | MeshCore has WiFi only in its separate companion WiFi builds (the app connects to the companion over WiFi); the companion here keeps exactly that. This fork's own code (`src/helpers/net/`) adds WiFi for the repeater and room server with a password-protected TCP console on port 5000, MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
 | Firmware per role | One firmware per ESP32 board and role: repeater `<board>_mn_rpt`, companion `<board>_mn_cmp` (Bluetooth, USB and WiFi at the same time), room server `<board>_mn_rs`. Every role contains the network layer (WiFi, MQTT, NTP, observer; the repeater and room server add a TCP console), all off by default. Boards without WiFi, and boards that cannot hold a role's full feature set, get no MeshNomad firmware — see [Supported boards](#supported-boards). Release builds have debug logging switched off. | 1.18.0 |
 | Sensors | INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by their chip ID, so an INA219 on 0x40 still works). | 1.18.0 |
 
 ## Commands
 
-Commands added by this fork, or whose default it changes. Type them on the USB
-serial console, in the MeshNomad app console, or as remote admin over LoRa.
+Commands added by this fork, or whose default it changes. Where to type them:
+
+- **Repeater, room server:** the USB serial console, the network console (`tcp.enabled 1`),
+  the MeshNomad app's repeater / room server console, or remote admin over LoRa.
+- **Companion:** its USB port speaks the app protocol, not text, so there is no serial
+  console. Commands reach it as remote admin over LoRa from a contact you allowed remote
+  CLI, or from an app through the companion protocol's CLI command; the MeshNomad app has
+  no companion console yet.
+
 `get <key>` shows the current value, `set <key> <value>` changes and saves it.
 Every entry lists the values, the default and an example.
 
@@ -99,6 +106,14 @@ get build
 ```
 
 ### Network (ESP32)
+
+MeshCore itself has WiFi only in its separate companion WiFi builds: the companion joins a
+network and the app talks to it over TCP port 5000 (`wifi.ssid`, `wifi.pwd`, `wifi.clear`,
+`wifi.enabled`, `wifi.status`, `wifi.ip`; applied after a reboot). MeshNomad keeps that
+unchanged for the companion. Everything else here — WiFi for the repeater and room server
+(same command names, applied immediately), the network console, MQTT with Home Assistant
+discovery, NTP, the observer, `wifi.power` and `net …` — is this fork's own code
+(`src/helpers/net/`), not part of MeshCore.
 
 Roles: repeater, room server and companion on ESP32 boards. Everything here is off by default.
 On the companion, WiFi itself (`wifi.ssid`, `wifi.pwd`, `wifi.enabled`, …) is MeshCore's own and
@@ -165,59 +180,60 @@ client. What such a node does not have is everything listed in [What you get](#w
 the app recognises a MeshCore build and does not offer those commands.
 
 MeshNomad firmware is released for these boards (✓). The board name is the start of the
-firmware file name, e.g. `Heltec_v3_mn_rpt-v1.18.0-meshnomad.1-<commit>.bin`. A — means
+firmware file name, e.g. `Heltec_v3_mn_rpt-v1.18.0-meshnomad.1-<commit>.bin`; the vendor is
+the name used to pick boards for development builds (see [Versions](#versions)). A — means
 MeshCore releases no firmware of that role for the board, or, for the companion, the board
 cannot hold it (see the table below).
 
 <!-- >>> supported boards (generated by tool/meshnomad/gen_envs.py) -->
-| Board | Repeater | Companion | Room server |
-|---|---|---|---|
-| `Ebyte_EoRa-S3` | ✓ | — | ✓ |
-| `Generic_E22_sx1262` | ✓ | — | — |
-| `Generic_E22_sx1268` | ✓ | — | — |
-| `Heltec_ct62` | ✓ | ✓ | — |
-| `Heltec_E213` | ✓ | ✓ | ✓ |
-| `Heltec_E290` | ✓ | — | ✓ |
-| `heltec_rc32` | ✓ | ✓ | ✓ |
-| `heltec_rc32_without_display` | ✓ | ✓ | ✓ |
-| `heltec_tracker_v2` | ✓ | ✓ | ✓ |
-| `Heltec_v2` | ✓ | — | ✓ |
-| `Heltec_v3` | ✓ | ✓ | ✓ |
-| `heltec_v4` | ✓ | ✓ | ✓ |
-| `heltec_v4_expansionkit` | ✓ | — | — |
-| `heltec_v4_r8` | ✓ | ✓ | ✓ |
-| `heltec_v4_r8_tft` | ✓ | ✓ | ✓ |
-| `heltec_v4_tft` | ✓ | ✓ | ✓ |
-| `Heltec_Wireless_Paper` | ✓ | ✓ | ✓ |
-| `Heltec_Wireless_Tracker` | ✓ | ✓ | ✓ |
-| `Heltec_WSL3` | ✓ | ✓ | ✓ |
-| `LilyGo_T3S3_sx1262` | ✓ | — | ✓ |
-| `LilyGo_T3S3_sx1276` | ✓ | — | ✓ |
-| `LilyGo_TBeam_1W` | ✓ | — | ✓ |
-| `LilyGo_TDeck` | ✓ | ✓ | — |
-| `LilyGo_TETH_Elite_sx1262` | ✓ | ✓ | ✓ |
-| `LilyGo_TLora_V2_1_1_6` | ✓ | — | ✓ |
-| `M5Stack_Unit_C6L` | ✓ | — | ✓ |
-| `Meshadventurer_sx1262` | ✓ | — | ✓ |
-| `Meshadventurer_sx1268` | ✓ | — | ✓ |
-| `meshnology_w12` | ✓ | ✓ | ✓ |
-| `RAK_3112` | ✓ | ✓ | ✓ |
-| `Station_G2` | ✓ | — | ✓ |
-| `Station_G2_logging` | ✓ | — | — |
-| `Station_G3_ESP32` | ✓ | — | ✓ |
-| `Station_G3_ESP32_logging` | ✓ | — | — |
-| `T_Beam_S3_Supreme_SX1262` | ✓ | ✓ | ✓ |
-| `Tbeam_SX1262` | ✓ | — | ✓ |
-| `Tbeam_SX1276` | ✓ | — | ✓ |
-| `Tenstar_C3_sx1262` | ✓ | — | — |
-| `Tenstar_C3_sx1268` | ✓ | — | — |
-| `ThinkNode_M2` | ✓ | — | ✓ |
-| `ThinkNode_M5` | ✓ | — | ✓ |
-| `ThinkNode_M7` | ✓ | ✓ | ✓ |
-| `Waveshare_S3_LR1121` | ✓ | ✓ | ✓ |
-| `Xiao_C3` | ✓ | ✓ | ✓ |
-| `Xiao_S3` | ✓ | ✓ | ✓ |
-| `Xiao_S3_WIO` | ✓ | ✓ | ✓ |
+| Board | Vendor | Repeater | Companion | Room server |
+|---|---|---|---|---|
+| `Ebyte_EoRa-S3` | `ebyte` | ✓ | — | ✓ |
+| `Generic_E22_sx1262` | `generic` | ✓ | — | — |
+| `Generic_E22_sx1268` | `generic` | ✓ | — | — |
+| `Heltec_ct62` | `heltec` | ✓ | ✓ | — |
+| `Heltec_E213` | `heltec` | ✓ | ✓ | ✓ |
+| `Heltec_E290` | `heltec` | ✓ | — | ✓ |
+| `heltec_rc32` | `heltec` | ✓ | ✓ | ✓ |
+| `heltec_rc32_without_display` | `heltec` | ✓ | ✓ | ✓ |
+| `heltec_tracker_v2` | `heltec` | ✓ | ✓ | ✓ |
+| `Heltec_v2` | `heltec` | ✓ | — | ✓ |
+| `Heltec_v3` | `heltec` | ✓ | ✓ | ✓ |
+| `heltec_v4` | `heltec` | ✓ | ✓ | ✓ |
+| `heltec_v4_expansionkit` | `heltec` | ✓ | — | — |
+| `heltec_v4_r8` | `heltec` | ✓ | ✓ | ✓ |
+| `heltec_v4_r8_tft` | `heltec` | ✓ | ✓ | ✓ |
+| `heltec_v4_tft` | `heltec` | ✓ | ✓ | ✓ |
+| `Heltec_Wireless_Paper` | `heltec` | ✓ | ✓ | ✓ |
+| `Heltec_Wireless_Tracker` | `heltec` | ✓ | ✓ | ✓ |
+| `Heltec_WSL3` | `heltec` | ✓ | ✓ | ✓ |
+| `LilyGo_T3S3_sx1262` | `lilygo` | ✓ | — | ✓ |
+| `LilyGo_T3S3_sx1276` | `lilygo` | ✓ | — | ✓ |
+| `LilyGo_TBeam_1W` | `lilygo` | ✓ | — | ✓ |
+| `LilyGo_TDeck` | `lilygo` | ✓ | ✓ | — |
+| `LilyGo_TETH_Elite_sx1262` | `lilygo` | ✓ | ✓ | ✓ |
+| `LilyGo_TLora_V2_1_1_6` | `lilygo` | ✓ | — | ✓ |
+| `M5Stack_Unit_C6L` | `m5stack` | ✓ | — | ✓ |
+| `Meshadventurer_sx1262` | `meshadventurer` | ✓ | — | ✓ |
+| `Meshadventurer_sx1268` | `meshadventurer` | ✓ | — | ✓ |
+| `meshnology_w12` | `meshnology` | ✓ | ✓ | ✓ |
+| `RAK_3112` | `rak` | ✓ | ✓ | ✓ |
+| `Station_G2` | `bq` | ✓ | — | ✓ |
+| `Station_G2_logging` | `bq` | ✓ | — | — |
+| `Station_G3_ESP32` | `bq` | ✓ | — | ✓ |
+| `Station_G3_ESP32_logging` | `bq` | ✓ | — | — |
+| `T_Beam_S3_Supreme_SX1262` | `lilygo` | ✓ | ✓ | ✓ |
+| `Tbeam_SX1262` | `lilygo` | ✓ | — | ✓ |
+| `Tbeam_SX1276` | `lilygo` | ✓ | — | ✓ |
+| `Tenstar_C3_sx1262` | `tenstar` | ✓ | — | — |
+| `Tenstar_C3_sx1268` | `tenstar` | ✓ | — | — |
+| `ThinkNode_M2` | `elecrow` | ✓ | — | ✓ |
+| `ThinkNode_M5` | `elecrow` | ✓ | — | ✓ |
+| `ThinkNode_M7` | `elecrow` | ✓ | ✓ | ✓ |
+| `Waveshare_S3_LR1121` | `waveshare` | ✓ | ✓ | ✓ |
+| `Xiao_C3` | `seeed` | ✓ | ✓ | ✓ |
+| `Xiao_S3` | `seeed` | ✓ | ✓ | ✓ |
+| `Xiao_S3_WIO` | `seeed` | ✓ | ✓ | ✓ |
 <!-- <<< supported boards -->
 
 ESP32 boards MeshCore releases a companion for, but MeshNomad does not:
@@ -240,6 +256,32 @@ ESP32 boards MeshCore releases a companion for, but MeshNomad does not:
 | `ThinkNode_M2` | do not fit in its flash |
 | `ThinkNode_M5` | do not fit in its flash |
 
+## Flashing
+
+Every firmware comes as two files:
+
+| File | Contains | Write it at | Use it to |
+|---|---|---|---|
+| `<board>_mn_<role>-<version>-merged.bin` | bootloader, partition table and firmware | `0x0` | install on a new board, move from other firmware, repair a board, or when the release notes say "Full reset required" |
+| `<board>_mn_<role>-<version>.bin` | firmware only | `0x10000` | update a board that already runs MeshNomad or MeshCore firmware for the same board; also the file for over-the-air (OTA) updates |
+
+The `-merged.bin` file also overwrites the `nvs` area, so Bluetooth pairings are lost and the
+phone has to pair again. The node's identity key and contacts live in the file-system
+partition, which neither file reaches (checked on Heltec V4; the layout is set per board).
+A full chip erase (`esptool.py erase_flash`) before flashing removes them too.
+
+With [esptool](https://github.com/espressif/esptool), using the chip of your board
+(`esp32`, `esp32s3`, `esp32c3`, `esp32c6`):
+
+```
+esptool.py --chip esp32s3 write_flash 0x0 heltec_v4_mn_rpt-v1.18.0-meshnomad.1-9f3c2a1-merged.bin
+esptool.py --chip esp32s3 write_flash 0x10000 heltec_v4_mn_rpt-v1.18.0-meshnomad.1-9f3c2a1.bin
+```
+
+Each release's notes say whether a board's partition table changed since the previous
+release. If it did, that board needs the `-merged.bin` file at 0x0; otherwise the `.bin`
+file at 0x10000 updates it and keeps its settings.
+
 ## Versions
 
 | Tag | Firmware reports | Meaning |
@@ -252,11 +294,8 @@ Development builds are started by hand: **Actions → Build Dev Firmware → Run
 on `dev-meshnomad`, or `tool/meshnomad/dev_build.py` in a terminal. Boards are picked
 from the two lists or as paths `<vendor>/<board>/<role>` — `heltec/heltec_v4/rpt`,
 `heltec/heltec_v4` (all roles), `heltec`, `heltec/*/rpt`, `*/*/cmp`, several separated
-by commas. Vendor and board names are those of the table above, in lower case.
-
-Each release's notes say whether a board's partition table changed since the previous
-release. If it did, that board needs a full reset (the `-merged.bin` file at 0x0); otherwise
-the `.bin` file at 0x10000 updates it and keeps its settings.
+by commas. Vendor and board names are the Vendor and Board columns of
+[Supported boards](#supported-boards), in lower case.
 
 ## Building
 
@@ -265,6 +304,14 @@ MeshNomad builds are the envs named `<board>_mn_<role>` (`rpt`, `cmp`, `rs`), e.
 `pio run -e Heltec_v3_mn_rpt`. They are generated into `variants/meshnomad/platformio.ini`
 by `tool/meshnomad/gen_envs.py`. MeshCore's own envs for ESP32 boards stay available
 unchanged; the board variants without ESP32 are not part of this fork.
+
+A plain `pio run` gives firmware that reports MeshCore's version (`v1.18.0`) and
+`get build` → `unknown`, so the MeshNomad app treats it as MeshCore firmware. To build what
+the releases contain, use `build.sh`; the two files of [Flashing](#flashing) land in `out/`:
+
+```
+FIRMWARE_VERSION=v1.18.0-meshnomad.local bash build.sh build-firmware Heltec_v3_mn_rpt
+```
 
 ## Staying in sync
 

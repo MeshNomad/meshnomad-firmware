@@ -180,10 +180,14 @@ def generate(config: list) -> tuple[str, dict[str, set[str]]]:
 
 
 def render_table(released: dict[str, set[str]]) -> str:
-    lines = [README_BEGIN, "| Board | Repeater | Companion | Room server |", "|---|---|---|---|"]
+    lines = [
+        README_BEGIN,
+        "| Board | Vendor | Repeater | Companion | Room server |",
+        "|---|---|---|---|---|",
+    ]
     for board in sorted(released, key=str.lower):
         marks = " | ".join("✓" if role in released[board] else "—" for role in ROLES)
-        lines.append(f"| `{board}` | {marks} |")
+        lines.append(f"| `{board}` | `{vendor_of(board) or '?'}` | {marks} |")
     return "\n".join([*lines, README_END]) + "\n"
 
 
