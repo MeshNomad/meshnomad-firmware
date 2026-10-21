@@ -12,9 +12,7 @@ on:
       - 'logo/**'
       - 'include/README'
       - 'license.txt'
-      - 'CNAME'
       - 'mkdocs.yml'
-      - '.github/FUNDING.yml'
   workflow_dispatch:
 
 jobs:
