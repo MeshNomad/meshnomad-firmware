@@ -18,8 +18,9 @@ MeshNomad firmware is MeshCore plus:
 - **Network features:** WiFi, a password-protected network console, MQTT
   telemetry with Home Assistant discovery, NTP clock sync and an MQTT packet observer.
   All off until you switch them on.
-- **Sensor and build commands:** `sensor read`, `sensor scan`, and `get features`, which
-  lets the MeshNomad app show only the commands your firmware has.
+- **Sensor and build commands:** `sensor read`, `sensor scan`, `get features`, which
+  lets the MeshNomad app show only the commands your firmware has, and `get build`, which
+  tells it which firmware file fits the device.
 - **2-byte path hash by default** on a fresh install.
 
 The radio, the protocol and the routing are MeshCore's, so a MeshNomad node works with any
@@ -49,7 +50,7 @@ listed below.
 |---|---|---|
 | Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>`, e.g. `v1.18.0-meshnomad.2`; the number after the dot counts our releases on that MeshCore version and starts again at 1 on the next one. | 1.18.0 |
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
-| CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app). | 1.18.0 |
+| CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app), `get build` (which firmware build this is, e.g. `heltec_v4_mn_rpt`). | 1.18.0 |
 | Network (ESP32) | Optional WiFi (repeater, room server: with a password-protected TCP console on port 5000; companion: MeshCore's own WiFi), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
 | Firmware per role | One firmware per ESP32 board and role: repeater `<board>_mn_rpt`, companion `<board>_mn_cmp` (Bluetooth, USB and WiFi at the same time), room server `<board>_mn_rs`. Every role contains the network layer (WiFi, MQTT, NTP, observer; the repeater and room server add a TCP console), all off by default. Boards without WiFi, and boards that cannot hold a role's full feature set, get no MeshNomad firmware — see [Supported boards](#supported-boards). Release builds have debug logging switched off. | 1.18.0 |
 | Sensors | INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by their chip ID, so an INA219 on 0x40 still works). | 1.18.0 |
@@ -79,13 +80,14 @@ set path.hash.mode 2
 
 ### Sensors and build info
 
-Roles: `sensor read` and `sensor scan` — repeater, room server; `get features` — all roles.
+Roles: `sensor read` and `sensor scan` — repeater, room server; `get features`, `get build` — all roles.
 
 | Command | What it does | Values | Default |
 |---|---|---|---|
 | `sensor read` | Reads every sensor now and prints one value per line, channel first (`ch2 temp=21.3C`). | — | — |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus — a quick wiring check. Prints `no I2C devices` when nothing answers. | — | — |
 | `get features` | Lists what this firmware build contains, e.g. `wifi mqtt ntp observer gps`; `none` when nothing extra. The MeshNomad app uses it to show only commands that exist. | — | — |
+| `get build` | Shows which firmware build this is — board and role, as in the firmware file name, e.g. `heltec_v4_mn_rpt`; `unknown` when the firmware was not built with `build.sh`. The MeshNomad app uses it to offer the right file for this device. | — | — |
 
 Example:
 
@@ -93,6 +95,7 @@ Example:
 sensor scan
 sensor read
 get features
+get build
 ```
 
 ### Network (ESP32)

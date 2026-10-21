@@ -748,6 +748,8 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
     char list[96];
     meshnomadFeatures(list, sizeof(list));
     sprintf(reply, "> %s", list);
+  } else if (strcmp(config, "build") == 0) {  // MeshNomad: build env, e.g. heltec_v4_mn_rpt
+    sprintf(reply, "> %s", MESHNOMAD_BUILD_ENV);
   } else if (memcmp(config, "allow.read.only", 15) == 0) {
     sprintf(reply, "> %s", _prefs->allow_read_only ? "on" : "off");
   } else if (memcmp(config, "flood.advert.interval", 21) == 0) {

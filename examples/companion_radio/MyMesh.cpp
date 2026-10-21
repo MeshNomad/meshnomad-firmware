@@ -2198,6 +2198,11 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     return true;
   }
 
+  if (strcmp(command, "get build") == 0) {  // MeshNomad: build env, e.g. heltec_v4_mn_cmp
+    sprintf(reply, "> %s", MESHNOMAD_BUILD_ENV);
+    return true;
+  }
+
   if (strcmp(command, "board") == 0) {
     strcpy(reply, board.getManufacturerName());
     return true;

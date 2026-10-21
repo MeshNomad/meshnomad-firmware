@@ -5,6 +5,12 @@
 #include <stdio.h>
 #include <string.h>
 
+// MeshNomad: the build env (`<board>_mn_<role>`) for `get build`, set by build.sh, so the app
+// can tell which firmware file fits this device.
+#ifndef MESHNOMAD_BUILD_ENV
+  #define MESHNOMAD_BUILD_ENV "unknown"
+#endif
+
 inline void meshnomadFeatures(char* out, size_t n) {
   out[0] = 0;
   size_t len = 0;
