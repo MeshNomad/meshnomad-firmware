@@ -278,6 +278,13 @@ esptool.py --chip esp32s3 write_flash 0x0 heltec_v4_mn_rpt-v1.18.0-meshnomad.1-9
 esptool.py --chip esp32s3 write_flash 0x10000 heltec_v4_mn_rpt-v1.18.0-meshnomad.1-9f3c2a1.bin
 ```
 
+Use esptool 4.8 or newer. Some boards connect through the chip's own USB, and the port
+shows up as "USB JTAG/serial debug unit" (for example Heltec V4 and T-Beam S3 Supreme).
+If an upload to such a board is interrupted, older versions cannot flash it again: the
+chip resets during the erase, and the upload fails with
+`Could not configure port: (5, 'Input/output error')`. `pio run -t upload` in this
+repository already uses esptool 4.8.1.
+
 Each release's notes say whether a board's partition table changed since the previous
 release. If it did, that board needs the `-merged.bin` file at 0x0; otherwise the `.bin`
 file at 0x10000 updates it and keeps its settings.
