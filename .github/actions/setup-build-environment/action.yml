@@ -22,8 +22,8 @@ runs:
         pip install --upgrade platformio
 
     # Tag "rpt-v1.18.0-meshnomad.3": GIT_TAG_VERSION = "v1.18.0-meshnomad.3" — used in the
-    # release title, compiled into the firmware and in the file names. Branch builds use the
-    # branch name.
+    # release title, compiled into the firmware and in the file names. Branch builds get
+    # "<MeshCore version>-meshnomad.dev", e.g. "v1.18.0-meshnomad.dev"; build.sh appends the commit.
     - name: Extract Version from Git Tag
       shell: bash
       run: |
@@ -31,8 +31,8 @@ runs:
           GIT_TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION_STRING="v${GIT_TAG_NAME#*-v}"
         else
-          # strip "refs/heads/" prefix and replace any remaining "/" with "-" to protect file paths
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          VERSION_STRING=$(echo "$BRANCH_NAME" | tr '/' '-')
+          BASE=$(sed -nE 's/.*define FIRMWARE_VERSION +"(v[0-9.]+)".*/\1/p' \
+            examples/simple_repeater/MyMesh.h | head -n 1)
+          VERSION_STRING="${BASE:-v0.0.0}-meshnomad.dev"
         fi
         echo "GIT_TAG_VERSION=${VERSION_STRING}" >> $GITHUB_ENV

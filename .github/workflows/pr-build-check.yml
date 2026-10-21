@@ -10,6 +10,8 @@ on:
       - 'boards/**'
       - 'platformio.ini'
       - '.github/workflows/pr-build-check.yml'
+      - '.github/workflows/build-dev-firmware.yml'
+      - '.github/actions/**'
       - 'tool/meshnomad/**'
 
 jobs:

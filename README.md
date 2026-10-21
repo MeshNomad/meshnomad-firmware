@@ -243,6 +243,13 @@ ESP32 boards MeshCore releases a companion for, but MeshNomad does not:
 |---|---|---|
 | `rpt-v1.18.0-meshnomad.1` | `v1.18.0-meshnomad.1-<commit>` | first MeshNomad repeater release on MeshCore 1.18.0 |
 | `cmp-v…`, `rs-v…` | same scheme | companion, room server |
+| `dev-rpt`, `dev-cmp`, `dev-rs` (prerelease) | `v1.18.0-meshnomad.dev-<commit>` | latest development build from `dev-meshnomad`; may be unstable, replaced by the next one |
+
+Development builds are started by hand: **Actions → Build Dev Firmware → Run workflow**
+on `dev-meshnomad`, or `tool/meshnomad/dev_build.py` in a terminal. Boards are picked
+from the two lists or as paths `<vendor>/<board>/<role>` — `heltec/heltec_v4/rpt`,
+`heltec/heltec_v4` (all roles), `heltec`, `heltec/*/rpt`, `*/*/cmp`, several separated
+by commas. Vendor and board names are those of the table above, in lower case.
 
 ## Building
 
