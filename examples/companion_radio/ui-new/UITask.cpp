@@ -32,14 +32,22 @@
 #endif
 
 #include "icons.h"
+#include <helpers/MeshNomadBranding.h>
 
 class SplashScreen : public UIScreen {
   UITask* _task;
   unsigned long dismiss_after;
-  char _version_info[12];
+  char _version_info[24];
+#ifdef MESHNOMAD_BUILD
+  char _build_info[24];
+#endif
 
 public:
   SplashScreen(UITask* task) : _task(task) {
+#ifdef MESHNOMAD_BUILD
+    meshnomadBootInfo(FIRMWARE_VERSION, FIRMWARE_BUILD_DATE, _version_info, sizeof(_version_info),
+                      _build_info, sizeof(_build_info));
+#else
     // strip off dash and commit hash by changing dash to null terminator
     // e.g: v1.2.3-abcdef -> v1.2.3
     const char *ver = FIRMWARE_VERSION;
@@ -49,6 +57,7 @@ public:
     if (len >= sizeof(_version_info)) len = sizeof(_version_info) - 1;
     memcpy(_version_info, ver, len);
     _version_info[len] = 0;
+#endif
 
     dismiss_after = millis() + BOOT_SCREEN_MILLIS;
   }
@@ -57,10 +66,10 @@ public:
     // meshcore logo
     display.setColor(UIColor::corp_blue);
     int logoWidth = 128;
-    display.drawXbm((display.width() - logoWidth) / 2, 3, meshcore_logo, logoWidth, 13);
+    display.drawXbm((display.width() - logoWidth) / 2, 3, BOOT_LOGO, logoWidth, 13);
 
     // meshcore website
-    const char* website = "https://meshcore.io";
+    const char* website = BOOT_WEBSITE;
     display.setColor(UIColor::primary_txt);
     display.setTextSize(1);
     uint16_t websiteWidth = display.getTextWidth(website);
@@ -74,7 +83,11 @@ public:
 
     display.setColor(UIColor::secondary_txt);
     display.setTextSize(1);
+#ifdef MESHNOMAD_BUILD
+    display.drawTextCentered(display.width()/2, 48, _build_info);
+#else
     display.drawTextCentered(display.width()/2, 48, FIRMWARE_BUILD_DATE);
+#endif
 
     return 1000;
   }

@@ -29,6 +29,8 @@ static const uint8_t meshcore_logo [] PROGMEM = {
     0xe3, 0xe3, 0x8f, 0xff, 0x1f, 0xfc, 0x3c, 0x0e, 0x1f, 0xf8, 0xff, 0xf8, 0x70, 0x3c, 0x7f, 0xf8, 
 };
 
+#include <helpers/MeshNomadBranding.h>
+
 void UITask::begin(NodePrefs* node_prefs, const char* build_date, const char* firmware_version) {
   _prevBtnState = HIGH;
   _auto_off = millis() + AUTO_OFF_MILLIS;
@@ -59,10 +61,10 @@ void UITask::renderCurrScreen() {
     // meshcore logo
     _display->setColor(UIColor::corp_blue);
     int logoWidth = 128;
-    _display->drawXbm((_display->width() - logoWidth) / 2, 3, meshcore_logo, logoWidth, 13);
+    _display->drawXbm((_display->width() - logoWidth) / 2, 3, BOOT_LOGO, logoWidth, 13);
 
     // meshcore website
-    const char* website = "https://meshcore.io";
+    const char* website = BOOT_WEBSITE;
     _display->setColor(UIColor::primary_txt);
     _display->setTextSize(1);
     _display->drawTextCentered(_display->width() / 2, 22, website);
@@ -78,10 +80,10 @@ void UITask::renderCurrScreen() {
     // meshcore logo
     _display->setColor(UIColor::corp_blue);
     int logoWidth = 128;
-    _display->drawXbm((_display->width() - logoWidth) / 2, 3, meshcore_logo, logoWidth, 13);
+    _display->drawXbm((_display->width() - logoWidth) / 2, 3, BOOT_LOGO, logoWidth, 13);
 
     // meshcore website
-    const char* website = "https://meshcore.io";
+    const char* website = BOOT_WEBSITE;
     _display->setColor(UIColor::primary_txt);
     _display->setTextSize(1);
     _display->drawTextCentered(_display->width()/ 2, 22, website);
