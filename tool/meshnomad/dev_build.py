@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gen_envs import ROLES, TARGET, vendor_of  # noqa: E402
 
+REPO = "MeshNomad/meshnomad-firmware"
 WORKFLOW = "build-dev-firmware.yml"
 BRANCH = "dev-meshnomad"
 ENV_RE = re.compile(r"^\[env:(.+)_mn_(rpt|cmp|rs)\]$", re.M)
@@ -112,7 +113,12 @@ def created(stamp: str) -> float:
 
 
 def gh(*args: str) -> str:
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+    # The repository is named explicitly: gh does not know the SSH host alias of origin
+    # and would fall back to the upstream remote.
+    result = subprocess.run(["gh", *args, "--repo", REPO], capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.exit(f"gh {' '.join(args)}: {result.stderr.strip()}")
+    return result.stdout
 
 
 def dispatch(paths: list[str], yes: bool, watch: bool) -> int:
@@ -145,7 +151,7 @@ def dispatch(paths: list[str], yes: bool, watch: bool) -> int:
         return 0
     if not watch:
         return 0
-    result = subprocess.run(["gh", "run", "watch", run_id, "--exit-status"])
+    result = subprocess.run(["gh", "run", "watch", run_id, "--exit-status", "--repo", REPO])
     if result.returncode != 0:
         return result.returncode
     for role in sorted({env.rsplit("_mn_", 1)[1] for env in envs}):
