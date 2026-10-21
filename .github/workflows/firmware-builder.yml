@@ -88,10 +88,16 @@ jobs:
           merge-multiple: true
           path: out
 
+      - name: Compare partition tables with the previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tool/meshnomad/partition_changes.py "${GITHUB_REF#refs/tags/}" out > release-notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
           name: "${{ inputs.release_title_prefix }}-${{ env.GIT_TAG_VERSION }}"
+          body_path: release-notes.md
           generate_release_notes: true
           draft: true
           files: out/*

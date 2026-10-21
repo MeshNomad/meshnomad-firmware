@@ -254,6 +254,10 @@ from the two lists or as paths `<vendor>/<board>/<role>` — `heltec/heltec_v4/r
 `heltec/heltec_v4` (all roles), `heltec`, `heltec/*/rpt`, `*/*/cmp`, several separated
 by commas. Vendor and board names are those of the table above, in lower case.
 
+Each release's notes say whether a board's partition table changed since the previous
+release. If it did, that board needs a full reset (the `-merged.bin` file at 0x0); otherwise
+the `.bin` file at 0x10000 updates it and keeps its settings.
+
 ## Building
 
 Same as MeshCore — PlatformIO, see the [MeshCore documentation](https://github.com/meshcore-dev/MeshCore/tree/main/docs).
