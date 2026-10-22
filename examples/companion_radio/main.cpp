@@ -192,7 +192,7 @@ void setup() {
 
 #ifdef BLE_PIN_CODE // 123456 by default
   if (the_mesh.getNodePrefs()->ble_pin == 0) {
-#ifdef DISPLAY_CLASS
+#if defined(DISPLAY_CLASS) && !defined(MESHNOMAD_BUILD)  // MeshNomad: fixed default PIN, no random one
     if (disp != NULL && BLE_PIN_CODE == 123456) {
       StdRNG rng;
       the_mesh.setBLEPin(rng.nextInt(100000, 999999)); // random pin each session
