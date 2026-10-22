@@ -146,8 +146,12 @@ def render_env(board: str, role: str, base: str, opts: dict) -> str:
     flags.append("${mn_release.build_flags}")
     unflags.append("${mn_release.build_unflags}")
     # pioarduino platforms already bring a newer esptool; pin only on platformio/espressif32
-    tools = ["${mn_esp32_tools.platform_packages}"] if "platformio/espressif32" in str(
-        opts.get("platform", "")) else []
+    tools, scripts = [], []
+    if "platformio/espressif32" in str(opts.get("platform", "")):
+        tools = ["${mn_esp32_tools.platform_packages}"]
+        if "extra_scripts" in opts:
+            scripts.append(f"${{env:{base}.extra_scripts}}")
+        scripts.append("${mn_esp32_tools.extra_scripts}")
     lines = [f"[env:{board}_mn_{role}]", f"extends = env:{base}"]
     for key, values in (
         ("build_flags", flags),
@@ -155,6 +159,7 @@ def render_env(board: str, role: str, base: str, opts: dict) -> str:
         ("build_src_filter", src),
         ("lib_deps", libs),
         ("platform_packages", tools),
+        ("extra_scripts", scripts),
     ):
         if values:
             lines.append(f"{key} =")
