@@ -6,6 +6,7 @@
 class UITask {
   DisplayDriver* _display;
   unsigned long _next_read, _next_refresh, _auto_off;
+  unsigned long _started_at = 0;
   int _prevBtnState;
   NodePrefs* _node_prefs;
   char _version_info[32];
