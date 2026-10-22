@@ -13,9 +13,20 @@ void ArduinoSerialInterface::disable() {
   _isEnabled = false;
 }
 
-bool ArduinoSerialInterface::isConnected() const { 
+#ifdef MESHNOMAD_BUILD
+// MeshNomad: a USB cable alone (power, open port) is not an app session. Next to Bluetooth and
+// WiFi in one companion, "always connected" hid the BLE PIN on the display; count USB as
+// connected only within 60 s of the last frame the app sent.
+#define APP_FRAME_TIMEOUT_MILLIS  60000
+
+bool ArduinoSerialInterface::isConnected() const {
+  return _last_frame_at != 0 && millis() - _last_frame_at < APP_FRAME_TIMEOUT_MILLIS;
+}
+#else
+bool ArduinoSerialInterface::isConnected() const {
   return true;   // no way of knowing, so assume yes
 }
+#endif
 
 bool ArduinoSerialInterface::isWriteBusy() const {
   return false;
@@ -65,6 +76,9 @@ size_t ArduinoSerialInterface::checkRecvFrame(uint8_t dest[]) {
           if (_frame_len > MAX_FRAME_SIZE) _frame_len = MAX_FRAME_SIZE;    // truncate
           memcpy(dest, rx_buf, _frame_len);
           _state = RECV_STATE_IDLE;  // reset state, for next frame
+#ifdef MESHNOMAD_BUILD
+          _last_frame_at = millis();
+#endif
           return _frame_len;
         }
     }

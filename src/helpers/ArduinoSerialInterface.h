@@ -10,6 +10,9 @@ class ArduinoSerialInterface : public BaseSerialInterface {
   uint16_t rx_len;
   Stream* _serial;
   uint8_t rx_buf[MAX_FRAME_SIZE];
+#ifdef MESHNOMAD_BUILD
+  unsigned long _last_frame_at = 0;  // millis() of the last complete frame from the app
+#endif
 
 public:
   ArduinoSerialInterface() { _isEnabled = false; _state = 0; }
