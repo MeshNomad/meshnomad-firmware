@@ -28,6 +28,12 @@ static const uint8_t meshnomad_logo [] = {
 #define BOOT_LOGO     meshnomad_logo
 #define BOOT_WEBSITE  "https://meshnomad.org"
 
+// Repeater / room server boot screen rows: website, version, commit + date, node type
+#define BOOT_Y_WEBSITE    20
+#define BOOT_Y_VERSION    31
+#define BOOT_Y_BUILD      42
+#define BOOT_Y_NODE_TYPE  53
+
 #include <stdio.h>
 #include <string.h>
 
@@ -67,5 +73,9 @@ inline void meshnomadBootInfo(const char* fw, const char* build_date,
 
 #define BOOT_LOGO     meshcore_logo
 #define BOOT_WEBSITE  "https://meshcore.io"
+
+#define BOOT_Y_WEBSITE    22
+#define BOOT_Y_VERSION    35
+#define BOOT_Y_NODE_TYPE  48
 
 #endif

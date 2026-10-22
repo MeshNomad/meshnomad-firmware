@@ -10,6 +10,9 @@ class UITask {
   int _prevBtnState;
   NodePrefs* _node_prefs;
   char _version_info[32];
+#ifdef MESHNOMAD_BUILD
+  char _build_info[24];
+#endif
   unsigned long _powering_off_at = 0;
   unsigned long _started_at = 0;
 

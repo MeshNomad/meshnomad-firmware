@@ -42,6 +42,10 @@ void UITask::begin(NodePrefs* node_prefs, const char* build_date, const char* fi
   user_btn.begin();
 #endif
 
+#ifdef MESHNOMAD_BUILD
+  meshnomadBootInfo(firmware_version, build_date, _version_info, sizeof(_version_info),
+                    _build_info, sizeof(_build_info));
+#else
   // strip off dash and commit hash by changing dash to null terminator
   // e.g: v1.2.3-abcdef -> v1.2.3
   char *version = strdup(firmware_version);
@@ -53,6 +57,7 @@ void UITask::begin(NodePrefs* node_prefs, const char* build_date, const char* fi
   // v1.2.3 (1 Jan 2025)
   snprintf(_version_info, sizeof(_version_info), "%s (%s)", version, build_date);
   free(version);
+#endif
 }
 
 void UITask::renderCurrScreen() {
@@ -67,15 +72,22 @@ void UITask::renderCurrScreen() {
     const char* website = BOOT_WEBSITE;
     _display->setColor(UIColor::primary_txt);
     _display->setTextSize(1);
-    _display->drawTextCentered(_display->width() / 2, 22, website);
+    _display->drawTextCentered(_display->width() / 2, BOOT_Y_WEBSITE, website);
 
     // version info
     _display->setTextSize(1);
-    _display->drawTextCentered(_display->width() / 2, 35, _version_info);
+    _display->drawTextCentered(_display->width() / 2, BOOT_Y_VERSION, _version_info);
+
+#ifdef MESHNOMAD_BUILD
+    // commit + build date
+    _display->setColor(UIColor::secondary_txt);
+    _display->drawTextCentered(_display->width() / 2, BOOT_Y_BUILD, _build_info);
+    _display->setColor(UIColor::primary_txt);
+#endif
 
     // node type
     const char* node_type = "< Repeater >";
-    _display->drawTextCentered(_display->width() / 2, 48, node_type);
+    _display->drawTextCentered(_display->width() / 2, BOOT_Y_NODE_TYPE, node_type);
   } else if (_powering_off_at > 0) {
     // meshcore logo
     _display->setColor(UIColor::corp_blue);

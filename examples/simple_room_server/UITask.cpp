@@ -34,6 +34,10 @@ void UITask::begin(NodePrefs* node_prefs, const char* build_date, const char* fi
   _node_prefs = node_prefs;
   _display->turnOn();
 
+#ifdef MESHNOMAD_BUILD
+  meshnomadBootInfo(firmware_version, build_date, _version_info, sizeof(_version_info),
+                    _build_info, sizeof(_build_info));
+#else
   // strip off dash and commit hash by changing dash to null terminator
   // e.g: v1.2.3-abcdef -> v1.2.3
   char *version = strdup(firmware_version);
@@ -45,6 +49,7 @@ void UITask::begin(NodePrefs* node_prefs, const char* build_date, const char* fi
   // v1.2.3 (1 Jan 2025)
   snprintf(_version_info, sizeof(_version_info), "%s (%s)", version, build_date);
   free(version);
+#endif
 }
 
 void UITask::renderCurrScreen() {
@@ -60,19 +65,28 @@ void UITask::renderCurrScreen() {
     _display->setColor(UIColor::primary_txt);
     _display->setTextSize(1);
     uint16_t websiteWidth = _display->getTextWidth(website);
-    _display->setCursor((_display->width() - websiteWidth) / 2, 22);
+    _display->setCursor((_display->width() - websiteWidth) / 2, BOOT_Y_WEBSITE);
     _display->print(website);
 
     // version info
     _display->setTextSize(1);
     uint16_t versionWidth = _display->getTextWidth(_version_info);
-    _display->setCursor((_display->width() - versionWidth) / 2, 35);
+    _display->setCursor((_display->width() - versionWidth) / 2, BOOT_Y_VERSION);
     _display->print(_version_info);
+
+#ifdef MESHNOMAD_BUILD
+    // commit + build date
+    _display->setColor(UIColor::secondary_txt);
+    uint16_t buildWidth = _display->getTextWidth(_build_info);
+    _display->setCursor((_display->width() - buildWidth) / 2, BOOT_Y_BUILD);
+    _display->print(_build_info);
+    _display->setColor(UIColor::primary_txt);
+#endif
 
     // node type
     const char* node_type = "< Room Server >";
     uint16_t typeWidth = _display->getTextWidth(node_type);
-    _display->setCursor((_display->width() - typeWidth) / 2, 48);
+    _display->setCursor((_display->width() - typeWidth) / 2, BOOT_Y_NODE_TYPE);
     _display->print(node_type);
   } else {  // home screen
     // node name

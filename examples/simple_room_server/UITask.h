@@ -9,6 +9,9 @@ class UITask {
   int _prevBtnState;
   NodePrefs* _node_prefs;
   char _version_info[32];
+#ifdef MESHNOMAD_BUILD
+  char _build_info[24];
+#endif
 
   void renderCurrScreen();
 public:
