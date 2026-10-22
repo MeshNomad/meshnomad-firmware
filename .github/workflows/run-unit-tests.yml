@@ -1,10 +1,10 @@
 name: Run Unit Tests
 
 on:
-  # No push trigger: main-meshnomad is fast-forwarded to a commit this job
-  # already passed on in its pull request.
+  # No push trigger: dev-meshnomad and main-meshnomad are fast-forwarded to a
+  # commit this job already passed on in its pull request.
   pull_request:
-    branches: [main-meshnomad]
+    branches: [dev-meshnomad, main-meshnomad]
     # Documentation-only changes cannot break the code under test.
     paths-ignore:
       - '**.md'

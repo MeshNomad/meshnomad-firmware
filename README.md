@@ -329,7 +329,8 @@ FIRMWARE_VERSION=v1.18.0-meshnomad.local bash build.sh build-firmware Heltec_v3_
   is then fast-forwarded, so a release is built from exactly the commit the checks
   passed on.
 - `dev-meshnomad` is where work happens: every change and every MeshCore release
-  is merged there first.
+  is merged there first, also through a pull request (from a `feat/`, `fix/` or
+  `chore/` branch) that is fast-forwarded once its checks pass.
 - After each MeshCore merge, run `tool/meshnomad/drop_unsupported.py`: it removes
   MeshCore's board variants and board files that have no ESP32 build (this also
   settles the merge conflicts on those files). Then run `tool/meshnomad/gen_envs.py`

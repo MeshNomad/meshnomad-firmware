@@ -2,13 +2,15 @@ name: PR Build Check
 
 on:
   pull_request:
-    branches: [main-meshnomad]
+    branches: [dev-meshnomad, main-meshnomad]
     paths:
       - 'src/**'
       - 'examples/**'
       - 'variants/**'
       - 'boards/**'
       - 'platformio.ini'
+      - 'merge-bin.py'
+      - 'build.sh'
       - '.github/workflows/pr-build-check.yml'
       - '.github/workflows/build-dev-firmware.yml'
       - '.github/actions/**'
