@@ -2155,7 +2155,8 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     return true;
   }
   if (strcmp(command, "get wifi.pwd") == 0) {
-    sprintf(reply, "> %s", _prefs.wifi_pwd);
+    // MeshNomad: do not echo the WiFi password (PWD)
+    sprintf(reply, "> %s", _prefs.wifi_pwd[0] ? "(set)" : "(not set)");
     return true;
   }
   if (strcmp(command, "set wifi.clear") == 0) {

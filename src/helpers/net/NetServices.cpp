@@ -402,7 +402,7 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     const char* key = command + 4;
     if (!isOwnedKey(key)) return false;
     if      (!strcmp(key, "wifi.ssid"))     snprintf(reply, n, "> %s", _cfg.wifi_ssid[0] ? _cfg.wifi_ssid : "(not set)");
-    else if (!strcmp(key, "wifi.pwd"))      snprintf(reply, n, "> %s", _cfg.wifi_pwd);
+    else if (!strcmp(key, "wifi.pwd"))      snprintf(reply, n, "> %s", _cfg.wifi_pwd[0] ? "(set)" : "(not set)");
     else if (!strcmp(key, "wifi.enabled"))  snprintf(reply, n, "> %d", _cfg.wifi_enabled ? 1 : 0);
     else if (!strcmp(key, "wifi.status"))   snprintf(reply, n, "> %s", isWifiConnected() ? "connected" : "disconnected");
     else if (!strcmp(key, "wifi.ip")) {
@@ -415,7 +415,7 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     else if (!strcmp(key, "mqtt.host"))     snprintf(reply, n, "> %s", _cfg.mqtt_host);
     else if (!strcmp(key, "mqtt.port"))     snprintf(reply, n, "> %d", _cfg.mqtt_port);
     else if (!strcmp(key, "mqtt.user"))     snprintf(reply, n, "> %s", _cfg.mqtt_user);
-    else if (!strcmp(key, "mqtt.pwd"))      snprintf(reply, n, "> %s", _cfg.mqtt_pwd);
+    else if (!strcmp(key, "mqtt.pwd"))      snprintf(reply, n, "> %s", _cfg.mqtt_pwd[0] ? "(set)" : "(not set)");
     else if (!strcmp(key, "mqtt.topic"))    snprintf(reply, n, "> %s", _cfg.mqtt_topic);
     else if (!strcmp(key, "net.telemetry")) snprintf(reply, n, "> %d", _cfg.telemetry_s);
     else if (!strcmp(key, "ntp.enabled"))   snprintf(reply, n, "> %d", _cfg.ntp_enabled ? 1 : 0);

@@ -55,6 +55,7 @@ listed below.
 | Firmware per role | One firmware per ESP32 board and role: repeater `<board>_mn_rpt`, companion `<board>_mn_cmp` (Bluetooth, USB and WiFi at the same time), room server `<board>_mn_rs`. Every role contains the network layer (WiFi, MQTT, NTP, observer; the repeater and room server add a TCP console), all off by default. Boards without WiFi, and boards that cannot hold a role's full feature set, get no MeshNomad firmware — see [Supported boards](#supported-boards). Release builds have debug logging switched off. | 1.18.0 |
 | Bluetooth PIN | The companion pairs with PIN `123456` on every board. MeshCore picks a random PIN at every start on boards with a display. A PIN set with `set pin` or in the app still takes precedence. | 1.18.0 |
 | Sensors | INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by their chip ID, so an INA219 on 0x40 still works). | 1.18.0 |
+| Passwords | `get wifi.pwd` (all roles, including the companion), `get mqtt.pwd` reply `> (set)` when a password is stored and `> (not set)` when it is empty; the password itself is never sent back. `set wifi.pwd` and `set mqtt.pwd` are unchanged. Not changed, as in MeshCore: the reply to `password <new>` still echoes the new admin password, and `get guest.password` still shows the guest password. | 1.18.0 |
 
 ## Commands
 
@@ -125,14 +126,14 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 | Command | What it does | Values | Default |
 |---|---|---|---|
 | `get/set wifi.ssid <name>` | WiFi network name. | text | empty |
-| `get/set wifi.pwd <password>` | WiFi password. | text | empty |
+| `get/set wifi.pwd <password>` | WiFi password. `get` does not show it: the reply is `> (set)` or `> (not set)`. | text | empty |
 | `set wifi.clear` | Empties the WiFi name and password. | — | — |
 | `get/set wifi.enabled <0\|1>` | Turns WiFi on or off, immediately. On a repeater with `powersaving on`, WiFi keeps the board out of light sleep, which would drop the WiFi link; the room server and companion on ESP32 do not sleep, with or without WiFi. | `0`, `1` | `0` |
 | `get wifi.status`, `get wifi.ip` | Connection state, IP address. | — | — |
 | `get/set wifi.power <dBm>` | WiFi transmit power, applied immediately; `0` = chip default. | dBm | `0` |
 | `get/set tcp.enabled <0\|1>` | Console over the network: TCP port 5000, asks for the node's admin password. Needs WiFi. Applied immediately. | `0`, `1` | `0` |
 | `get/set mqtt.enabled <0\|1>` | Sends telemetry to an MQTT broker, with Home Assistant discovery. Needs WiFi and `mqtt.host`. | `0`, `1` | `0` |
-| `get/set mqtt.host`, `mqtt.port`, `mqtt.user`, `mqtt.pwd`, `mqtt.topic` | Broker address, port, login, password, base topic. | text, number | empty, `1883`, empty, empty, `meshcore` |
+| `get/set mqtt.host`, `mqtt.port`, `mqtt.user`, `mqtt.pwd`, `mqtt.topic` | Broker address, port, login, password, base topic. `get mqtt.pwd` replies `> (set)` or `> (not set)`, never the password. | text, number | empty, `1883`, empty, empty, `meshcore` |
 | `get/set net.telemetry <seconds>` | How often telemetry is sent. | seconds | `60` |
 | `get/set ntp.enabled <0\|1>` | Sets the node's clock from an NTP server. Needs WiFi. | `0`, `1` | `0` |
 | `get/set ntp.server <host>`, `ntp.interval <seconds>` | NTP server; how often the clock is set again. | text, seconds | `pool.ntp.org`, `90000` |
