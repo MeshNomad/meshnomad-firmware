@@ -336,7 +336,7 @@ static bool isOwnedKey(const char* key) {
 #endif
     "wifi.power",
     "mqtt.enabled", "mqtt.host", "mqtt.port", "mqtt.user", "mqtt.pwd", "mqtt.topic",
-    "net.telemetry", "ntp.enabled", "ntp.server", "ntp.interval", "obs.enabled", "obs.iata",
+    "net.telemetry", "ntp.enabled", "ntp.server", "ntp.interval", "obs.enabled", "obs.iata", "obs.topic",
   };
   for (const char* k : KEYS) {
     if (!strcmp(key, k)) return true;
@@ -423,6 +423,7 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     else if (!strcmp(key, "ntp.interval"))  snprintf(reply, n, "> %d", _cfg.ntp_interval_s);
     else if (!strcmp(key, "obs.enabled"))   snprintf(reply, n, "> %d", _cfg.obs_enabled ? 1 : 0);
     else if (!strcmp(key, "obs.iata"))      snprintf(reply, n, "> %s", _cfg.obs_iata);
+    else if (!strcmp(key, "obs.topic"))     snprintf(reply, n, "> %s", _cfg.obs_topic);
     return true;
   }
 
@@ -656,7 +657,7 @@ void NetServices::observerDrain() {
     ObsPacket& p = _obs_q[_obs_head];
 
     char topic[112];
-    snprintf(topic, sizeof(topic), "%s/%s/%s/rx", _cfg.mqtt_topic, _cfg.obs_iata, _obs_id);
+    snprintf(topic, sizeof(topic), "%s/%s/%s/rx", _cfg.obs_topic, _cfg.obs_iata, _obs_id);
 
     static char payload[640];                // 510 hex + JSON wrapper
     int len = snprintf(payload, sizeof(payload), "{\"origin\":\"%s\",\"raw\":\"", _obs_origin);
@@ -676,7 +677,7 @@ void NetServices::observerDrain() {
 void NetServices::publishObsStatus(const Telemetry& t) {
   if (!observerActive()) return;
   char topic[120];
-  snprintf(topic, sizeof(topic), "%s/%s/%s/status", _cfg.mqtt_topic, _cfg.obs_iata, _obs_id);
+  snprintf(topic, sizeof(topic), "%s/%s/%s/status", _cfg.obs_topic, _cfg.obs_iata, _obs_id);
   char payload[320];
   snprintf(payload, sizeof(payload),
     "{\"origin\":\"%s\",\"model\":\"%s\",\"firmware_version\":\"%s\","

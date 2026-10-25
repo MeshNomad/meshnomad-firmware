@@ -127,7 +127,7 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 | `get/set wifi.ssid <name>` | WiFi network name. | text | empty |
 | `get/set wifi.pwd <password>` | WiFi password. | text | empty |
 | `set wifi.clear` | Empties the WiFi name and password. | — | — |
-| `get/set wifi.enabled <0\|1>` | Turns WiFi on or off, immediately. While WiFi is on the board does not sleep. | `0`, `1` | `0` |
+| `get/set wifi.enabled <0\|1>` | Turns WiFi on or off, immediately. On a repeater with `powersaving on`, WiFi keeps the board out of light sleep, which would drop the WiFi link; the room server and companion on ESP32 do not sleep, with or without WiFi. | `0`, `1` | `0` |
 | `get wifi.status`, `get wifi.ip` | Connection state, IP address. | — | — |
 | `get/set wifi.power <dBm>` | WiFi transmit power, applied immediately; `0` = chip default. | dBm | `0` |
 | `get/set tcp.enabled <0\|1>` | Console over the network: TCP port 5000, asks for the node's admin password. Needs WiFi. Applied immediately. | `0`, `1` | `0` |
@@ -136,8 +136,9 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 | `get/set net.telemetry <seconds>` | How often telemetry is sent. | seconds | `60` |
 | `get/set ntp.enabled <0\|1>` | Sets the node's clock from an NTP server. Needs WiFi. | `0`, `1` | `0` |
 | `get/set ntp.server <host>`, `ntp.interval <seconds>` | NTP server; how often the clock is set again. | text, seconds | `pool.ntp.org`, `90000` |
-| `get/set obs.enabled <0\|1>` | Observer: publishes every packet this node hears to MQTT, topic `<topic>/<IATA>/<node key>/rx`. Needs MQTT and `obs.iata`. | `0`, `1` | `0` |
+| `get/set obs.enabled <0\|1>` | Observer: publishes every packet this node hears to MQTT, topic `<obs.topic>/<IATA>/<node key>/rx`. Needs MQTT and `obs.iata`. | `0`, `1` | `0` |
 | `get/set obs.iata <code>` | Area code used in the observer topics, e.g. `WAW`. | text | empty |
+| `get/set obs.topic <topic>` | Root of the observer topics, separate from `mqtt.topic`. | text, max 23 chars | `meshcore` |
 | `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, packet counters. | — | — |
 | `net scan` | Lists WiFi networks in range (takes 2–3 s). | — | — |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*`, `obs.*` settings without a reboot. | — | — |

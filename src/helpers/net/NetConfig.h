@@ -44,6 +44,9 @@
 #ifndef OBSERVER_IATA
   #define OBSERVER_IATA ""           // area code for observer topics, e.g. WAW
 #endif
+#ifndef OBSERVER_TOPIC
+  #define OBSERVER_TOPIC "meshcore"  // observer topic root, separate from mqtt.topic
+#endif
 #ifndef TCP_CLI_PORT
   #define TCP_CLI_PORT 5000
 #endif
@@ -72,6 +75,7 @@ struct NetConfig {
 
   bool obs_enabled   = false;    // MQTT packet observer
   char obs_iata[8]   = {0};      // uppercased on set
+  char obs_topic[24] = {0};      // <obs_topic>/<IATA>/<node key>/rx|status
 
   void loadDefaults();           // populate from the build-flag macros
   void load();                   // read /netcfg, per-key fallback to defaults

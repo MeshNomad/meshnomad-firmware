@@ -26,6 +26,7 @@ bool NetConfig::assign(const char* k, const char* v) {
     strlcpy(obs_iata, v, sizeof(obs_iata));
     for (char* p = obs_iata; *p; p++) *p = toupper(*p);
   }
+  else if (!strcmp(k, "obs.topic"))     strlcpy(obs_topic, v, sizeof(obs_topic));
   else return false;
   return true;
 }
@@ -48,6 +49,7 @@ void NetConfig::loadDefaults() {
   ntp_interval_s = NTP_INTERVAL_SECS;
   obs_enabled = false;
   strlcpy(obs_iata, OBSERVER_IATA, sizeof(obs_iata));
+  strlcpy(obs_topic, OBSERVER_TOPIC, sizeof(obs_topic));
 }
 
 void NetConfig::load() {
@@ -87,6 +89,7 @@ void NetConfig::save() {
   f.printf("ntp.interval=%d\n", ntp_interval_s);
   f.printf("obs.enabled=%d\n", obs_enabled ? 1 : 0);
   f.printf("obs.iata=%s\n", obs_iata);
+  f.printf("obs.topic=%s\n", obs_topic);
   f.close();
 }
 
