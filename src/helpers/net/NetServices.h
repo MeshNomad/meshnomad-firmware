@@ -3,6 +3,7 @@
 // NetServices: network layer for MeshCore nodes on ESP32.
 //  - WiFi station with non-blocking reconnect and configurable TX power
 //  - password-protected network console over TLS (NetTls) that feeds the node's CLI
+//  - firmware update over HTTPS on request ('net ota', NetOta)
 //  - MQTT telemetry with Home Assistant discovery and online/offline status
 //  - SNTP clock sync into the node's RTC
 //  - MQTT packet observer (every received packet, raw hex + RF metrics)
@@ -19,6 +20,7 @@
 #include "NetConfig.h"
 #ifndef NET_WIFI_EXTERNAL
   #include "NetTls.h"        // TLS console; empty in the companion build
+  #include "NetOta.h"        // 'net ota' over HTTPS; empty in the companion build
 #endif
 
 // Snapshot of node telemetry, filled by the role via a callback. Optional fields
@@ -153,6 +155,19 @@ private:
   void cliAccept();             // lockout check -> handshake -> gate -> prompt
   void cliLine();               // one complete console line (login or command)
   void cliReset();
+
+  // ---- net ota (HTTPS firmware update, NetOta) ----
+  NetOta _ota;
+  bool   _sleep_inhibited = false;    // last value passed to _inhibit_sleep
+  void setSleepInhibit(bool on);
+  void updateSleepInhibit();          // inhibit = _wifi_started || ota session active
+  bool otaStopForNet();               // stop a running session; true if one was running
+  void otaCli(const char* arg, char* reply, size_t n);
+  // NetOtaHooks trampolines to the single instance; run in the httpd task.
+  static bool otaIsLocked(uint32_t ip);
+  static void otaLoginFailed(uint32_t ip);
+  static void otaLoginOk(uint32_t ip);
+  static const char* otaPassword();
 #endif
 
   // ---- MQTT ----

@@ -5,6 +5,7 @@
 #include <time.h>
 #include <esp_sntp.h>
 #include <esp_idf_version.h>
+#include <esp_heap_caps.h>
 
 // ESP-IDF 5 (e.g. ESP32-C6 builds) renamed sntp_stop() to esp_sntp_stop().
 #if ESP_IDF_VERSION_MAJOR >= 5
@@ -91,6 +92,9 @@ void NetServices::begin(const char* node_id, CmdFn cmd, TelemFn telem, SetTimeFn
 }
 
 void NetServices::loop() {
+#ifndef NET_WIFI_EXTERNAL
+  _ota.loop();                 // first: timeout, deferred stop and restart run even with WiFi down
+#endif
   if (_apply_pending) {        // 'net apply': restart everything with the stored config
     _apply_pending = false;
     stopAll();
@@ -98,10 +102,12 @@ void NetServices::loop() {
 
 #ifndef NET_WIFI_EXTERNAL
   applyWifiState();
+  updateSleepInhibit();        // releases the inhibit once a stopped session is fully off
   if (!_wifi_started) return;
   applyTcpState();
 
   if (WiFi.status() != WL_CONNECTED) {
+    if (_ota.running()) _ota.stop();   // WiFi dropped: end the session, no reboot
     ntpStop();                 // re-armed on reconnect
     if (_cli_srv.connected()) cliReset();
     unsigned long now = millis();
@@ -133,21 +139,22 @@ void NetServices::stopAll() {
   ntpStop();
   _discovery_sent = false;
 #ifndef NET_WIFI_EXTERNAL
+  _ota.stop();                 // aborts an upload (no reboot); the server ends in _ota.loop()
   cliReset();
   _cli_srv.end();              // listener closed; the key/cert stay loaded
   if (_wifi_started) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     _wifi_started = false;
-    if (_inhibit_sleep) _inhibit_sleep(false);
   }
+  updateSleepInhibit();        // stays inhibited until the ota server is fully off
 #endif
 }
 
 void NetServices::applyWifiState() {
 #ifndef NET_WIFI_EXTERNAL
   if (_cfg.wifi_enabled && !_wifi_started) {
-    if (_inhibit_sleep) _inhibit_sleep(true);   // light sleep would drop the WiFi link
+    setSleepInhibit(true);     // light sleep would drop the WiFi link
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     if (_cfg.wifi_ssid[0]) WiFi.begin(_cfg.wifi_ssid, _cfg.wifi_pwd);
@@ -224,6 +231,7 @@ static const unsigned long LOGIN_DEADLINE_MS = 15000UL;
 static const uint8_t       LOGIN_MAX_FAILS   = 3;
 static const unsigned long LOGIN_LOCKOUT_MS  = 300000UL;
 static const uint32_t      CLI_HANDSHAKE_MS  = 4000;      // loop() is blocked at most this long
+static const size_t        CLI_MIN_HEAP_OTA  = 48 * 1024; // console refused below this while net ota runs
 static const char* const   PW_GATE_MSG = "Error: change the admin password first (password <new>)";
 
 void NetServices::ensureTls() {
@@ -327,6 +335,14 @@ void NetServices::cliAccept() {
     Serial.printf("NetServices: console %s locked out, closed\n", ip_s);
     return;
   }
+  // A net ota session may hold the heap for its own TLS session: no handshake, no
+  // lockout count, just close.
+  if (_ota.active() &&
+      heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < CLI_MIN_HEAP_OTA) {
+    NetTls::Server::reject(fd);
+    Serial.printf("NetServices: console %s refused, net ota session holds the heap\n", ip_s);
+    return;
+  }
   // Blocks loop() for the handshake (software ECDHE/ECDSA) or up to CLI_HANDSHAKE_MS
   // for a silent peer such as plain `nc`.
   if (!_cli_srv.handshake(fd, CLI_HANDSHAKE_MS)) {
@@ -407,6 +423,106 @@ void NetServices::cliLoop() {
     }
   }
 }
+
+// ---- net ota ----
+// One HTTPS session needs two 16 KB TLS buffers plus handshake state; with the console
+// session open the node holds two TLS sessions, never a third (TLS-6: 60 KB gate).
+// Without an open console session, 40 KB more stay free so a console can still connect.
+static const size_t   OTA_MIN_FREE_HEAP  = 60 * 1024;
+static const size_t   OTA_CONSOLE_RESERVE = 40 * 1024;
+static const size_t   OTA_MIN_FREE_BLOCK = 40 * 1024;
+static const char* const OTA_STOPPED_SUFFIX = " (net ota stopped)";
+
+void NetServices::setSleepInhibit(bool on) {
+  if (on == _sleep_inhibited) return;
+  _sleep_inhibited = on;
+  if (_inhibit_sleep) _inhibit_sleep(on);
+}
+
+void NetServices::updateSleepInhibit() {
+  setSleepInhibit(_wifi_started || _ota.active());
+}
+
+bool NetServices::otaStopForNet() {
+  if (!_ota.running()) return false;
+  _ota.stop();
+  return true;
+}
+
+bool NetServices::otaIsLocked(uint32_t ip) { return g_net && g_net->lockoutCheck(ip); }
+void NetServices::otaLoginFailed(uint32_t ip) { if (g_net) g_net->lockoutFail(ip); }
+void NetServices::otaLoginOk(uint32_t ip) { if (g_net) g_net->lockoutOk(ip); }
+
+// The default-password gate holds for uploads too: no password means no login.
+const char* NetServices::otaPassword() {
+  if (!g_net || !g_net->_console_password || g_net->adminPasswordIsDefault()) return nullptr;
+  return g_net->_console_password();
+}
+
+// arg: the text after "net ota" (leading spaces allowed). Replies stay <= 120 chars.
+void NetServices::otaCli(const char* arg, char* reply, size_t n) {
+  while (*arg == ' ') arg++;
+  char ip[16];
+  strlcpy(ip, WiFi.localIP().toString().c_str(), sizeof(ip));
+
+  if (!strcmp(arg, "start")) {
+    if (!_wifi_started || WiFi.status() != WL_CONNECTED) {
+      snprintf(reply, n, "Error: WiFi not connected (wl=%d)", (int)WiFi.status());
+      return;
+    }
+    if (adminPasswordIsDefault()) {
+      snprintf(reply, n, "%s", PW_GATE_MSG);
+      return;
+    }
+    if (!_ota.active()) {      // a running session re-arms its timeout, needs no new memory
+      size_t free_b  = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      size_t block_b = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      size_t need = OTA_MIN_FREE_HEAP + (_cli_srv.connected() ? 0 : OTA_CONSOLE_RESERVE);
+      if (free_b < need || block_b < OTA_MIN_FREE_BLOCK) {
+        snprintf(reply, n, "Error: not enough memory");
+        return;
+      }
+    }
+    if (WiFi.getMode() & WIFI_MODE_AP) {
+      snprintf(reply, n, "Error: MeshCore OTA access point active, reboot first");
+      return;
+    }
+    NetOtaHooks hooks = {otaIsLocked, otaLoginFailed, otaLoginOk, otaPassword};
+    if (!_ota.start(hooks, (uint32_t)_cfg.ota_timeout_s)) {
+      snprintf(reply, n, "Error: %s", _ota.lastError());
+      return;
+    }
+    updateSleepInhibit();
+    if (_cfg.ota_timeout_s > 0) snprintf(reply, n, "> https://%s/update (%d s)", ip, _cfg.ota_timeout_s);
+    else snprintf(reply, n, "> https://%s/update (no limit)", ip);
+    return;
+  }
+  if (!strcmp(arg, "stop")) {
+    if (_ota.active()) {
+      _ota.stop();             // no-op while already stopping
+      snprintf(reply, n, "> net ota stopped");
+    } else {
+      snprintf(reply, n, "> off");
+    }
+    return;
+  }
+  if (!strcmp(arg, "status")) {
+    if (_ota.restartPending()) snprintf(reply, n, "> update done, restarting");
+    else if (!_ota.active())   snprintf(reply, n, "> off");
+    else if (!_ota.running())  snprintf(reply, n, "> stopping");
+    else {
+      char left[12];
+      if (_ota.hasLimit()) snprintf(left, sizeof(left), "%u", (unsigned)_ota.secondsLeft());
+      else strcpy(left, "-");
+      char up[12];
+      if (_ota.uploading()) snprintf(up, sizeof(up), "%u", (unsigned)_ota.uploadedBytes());
+      else strcpy(up, "idle");
+      snprintf(reply, n, "> on https://%s/update left:%s upload:%s", ip, left, up);
+    }
+    return;
+  }
+  snprintf(reply, n, "Error: net ota start|stop|status");
+}
 #endif // !NET_WIFI_EXTERNAL
 
 // ---- network CLI ----
@@ -417,6 +533,7 @@ static bool isOwnedKey(const char* key) {
   static const char* const KEYS[] = {
 #ifndef NET_WIFI_EXTERNAL
     "wifi.ssid", "wifi.pwd", "wifi.enabled", "wifi.status", "wifi.ip", "tcp.enabled", "net.cert",
+    "ota.timeout",
 #endif
     "wifi.power",
     "mqtt.enabled", "mqtt.host", "mqtt.port", "mqtt.user", "mqtt.pwd", "mqtt.topic",
@@ -429,6 +546,26 @@ static bool isOwnedKey(const char* key) {
 }
 
 bool NetServices::handleCli(const char* command, char* reply, size_t n) {
+#ifndef NET_WIFI_EXTERNAL
+  // Guards on upstream 'start ota': 9-char prefix match like CommonCLI's
+  // memcmp(command, "start ota", 9), so 'start ota x' is caught too; otherwise
+  // upstream handles it unchanged.
+  if (!strncmp(command, "start ota", 9)) {
+    if (_ota.active() || _ota.restartPending()) {
+      snprintf(reply, n, "Error: net ota session active (net ota stop first)");
+      return true;
+    }
+    if (_cfg.wifi_enabled) {
+      snprintf(reply, n, "Error: WiFi on - use net ota start, or set wifi.enabled 0");
+      return true;
+    }
+    return false;
+  }
+  if (!strncmp(command, "net ota", 7) && (command[7] == 0 || command[7] == ' ')) {
+    otaCli(command + 7, reply, n);
+    return true;
+  }
+#endif
   if (!strcmp(command, "net status")) {
     const char* ntp = !_cfg.ntp_enabled ? "off"
                     : (_ntp_state == NTP_SYNCED ? "synced"
@@ -454,18 +591,22 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
 #ifndef NET_WIFI_EXTERNAL
   if (!strcmp(command, "net scan")) {
     // Blocking (~2-3 s): what the board itself sees with its own antenna.
+    bool ota_stopped = otaStopForNet();   // the scan drops the link: end the session first
+    size_t lim = n;                       // room for the suffix within 120 chars
+    if (ota_stopped && lim > 121 - strlen(OTA_STOPPED_SUFFIX)) lim = 121 - strlen(OTA_STOPPED_SUFFIX);
     bool was_started = _wifi_started;
     if (was_started) WiFi.disconnect();   // a connect attempt in progress makes the scan fail
     else WiFi.mode(WIFI_STA);
     delay(150);
     int found = WiFi.scanNetworks();
-    int len = snprintf(reply, n, "found:%d", found < 0 ? 0 : found);
-    for (int i = 0; i < found && len < (int)n - 24; i++) {
-      len += snprintf(reply + len, n - len, " %s:%ddBm", WiFi.SSID(i).c_str(), (int)WiFi.RSSI(i));
+    int len = snprintf(reply, lim, "found:%d", found < 0 ? 0 : found);
+    for (int i = 0; i < found && len < (int)lim - 24; i++) {
+      len += snprintf(reply + len, lim - len, " %s:%ddBm", WiFi.SSID(i).c_str(), (int)WiFi.RSSI(i));
     }
     WiFi.scanDelete();
     if (!was_started) WiFi.mode(WIFI_OFF);
     else if (_cfg.wifi_ssid[0]) WiFi.begin(_cfg.wifi_ssid, _cfg.wifi_pwd);
+    if (ota_stopped) strlcat(reply, OTA_STOPPED_SUFFIX, n);
     return true;
   }
   if (!strcmp(command, "set wifi.clear")) {
@@ -494,6 +635,12 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
 #endif
   if (!strcmp(command, "net apply")) {
     _apply_pending = true;
+#ifndef NET_WIFI_EXTERNAL
+    if (otaStopForNet()) {     // stopAll() restarts WiFi: end the session now, no reboot
+      snprintf(reply, n, "> net applied%s", OTA_STOPPED_SUFFIX);
+      return true;
+    }
+#endif
     snprintf(reply, n, "> net applied");
     return true;
   }
@@ -517,6 +664,7 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
       if (NetTls::fingerprint(fp, sizeof(fp))) snprintf(reply, n, "> %s", fp);
       else snprintf(reply, n, "Error: no certificate yet, set wifi.enabled 1 first");
     }
+    else if (!strcmp(key, "ota.timeout"))   snprintf(reply, n, "> %d", _cfg.ota_timeout_s);
 #endif
     else if (!strcmp(key, "mqtt.enabled"))  snprintf(reply, n, "> %d", _cfg.mqtt_enabled ? 1 : 0);
     else if (!strcmp(key, "mqtt.host"))     snprintf(reply, n, "> %s", _cfg.mqtt_host);
@@ -564,6 +712,19 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
       snprintf(reply, n, "Error, minimum is 60 s");
       return true;
     }
+    bool ota_stopped = false;
+#ifndef NET_WIFI_EXTERNAL
+    if (!strcmp(key, "ota.timeout")) {          // digits only: 'abc' must not mean "no limit"
+      bool digits = val[0] != 0;
+      for (const char* p = val; *p; p++) digits = digits && isdigit((unsigned char)*p);
+      if (!digits || strlen(val) > 6 || num > NET_OTA_TIMEOUT_MAX_S) {
+        snprintf(reply, n, "Error, timeout must be 0-%d s (0 = no limit)", NET_OTA_TIMEOUT_MAX_S);
+        return true;
+      }
+    }
+    // WiFi off ends a running session first (abort, no reboot).
+    if (!strcmp(key, "wifi.enabled") && num == 0) ota_stopped = otaStopForNet();
+#endif
 
     _cfg.assign(key, val);
     _cfg.save();
@@ -577,7 +738,8 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
       char tmp[96];
       snprintf(tmp, sizeof(tmp), "get %s", key);
       handleCli(tmp, shown, sizeof(shown));      // echo the stored (normalised) value
-      snprintf(reply, n, "> %s is now %s", key, shown[0] == '>' ? shown + 2 : shown);
+      snprintf(reply, n, "> %s is now %s%s", key, shown[0] == '>' ? shown + 2 : shown,
+               ota_stopped ? " (net ota stopped)" : "");
     }
     return true;
   }

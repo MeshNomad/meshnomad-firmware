@@ -50,6 +50,10 @@
 #ifndef TCP_CLI_PORT
   #define TCP_CLI_PORT 5000
 #endif
+#ifndef NET_OTA_TIMEOUT_S
+  #define NET_OTA_TIMEOUT_S 600      // 'net ota' idle limit; 0 = no limit
+#endif
+#define NET_OTA_TIMEOUT_MAX_S 86400  // upper bound for ota.timeout (24 h)
 
 struct NetConfig {
   // Every switch is off on a fresh node; the user turns each one on via CLI.
@@ -76,6 +80,10 @@ struct NetConfig {
   bool obs_enabled   = false;    // MQTT packet observer
   char obs_iata[8]   = {0};      // uppercased on set
   char obs_topic[24] = {0};      // <obs_topic>/<IATA>/<node key>/rx|status
+
+  // each received chunk restarts it; 0 = no limit. Stored in every build; unused and not
+  // exposed via CLI in the companion (NET_WIFI_EXTERNAL).
+  int  ota_timeout_s = NET_OTA_TIMEOUT_S;
 
   void loadDefaults();           // populate from the build-flag macros
   void load();                   // read /netcfg, per-key fallback to defaults

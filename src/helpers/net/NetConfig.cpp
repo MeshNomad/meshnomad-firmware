@@ -27,6 +27,11 @@ bool NetConfig::assign(const char* k, const char* v) {
     for (char* p = obs_iata; *p; p++) *p = toupper(*p);
   }
   else if (!strcmp(k, "obs.topic"))     strlcpy(obs_topic, v, sizeof(obs_topic));
+  else if (!strcmp(k, "ota.timeout")) {
+    ota_timeout_s = atoi(v);
+    if (ota_timeout_s < 0) ota_timeout_s = 0;
+    if (ota_timeout_s > NET_OTA_TIMEOUT_MAX_S) ota_timeout_s = NET_OTA_TIMEOUT_MAX_S;
+  }
   else return false;
   return true;
 }
@@ -50,6 +55,7 @@ void NetConfig::loadDefaults() {
   obs_enabled = false;
   strlcpy(obs_iata, OBSERVER_IATA, sizeof(obs_iata));
   strlcpy(obs_topic, OBSERVER_TOPIC, sizeof(obs_topic));
+  ota_timeout_s = NET_OTA_TIMEOUT_S;
 }
 
 void NetConfig::load() {
@@ -90,6 +96,7 @@ void NetConfig::save() {
   f.printf("obs.enabled=%d\n", obs_enabled ? 1 : 0);
   f.printf("obs.iata=%s\n", obs_iata);
   f.printf("obs.topic=%s\n", obs_topic);
+  f.printf("ota.timeout=%d\n", ota_timeout_s);
   f.close();
 }
 
