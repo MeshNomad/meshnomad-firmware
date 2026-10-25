@@ -51,11 +51,14 @@ listed below.
 | Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>-<commit>`, e.g. `v1.18.0-meshnomad.2-9f3c2a1`; the number after `meshnomad.` counts our releases on that MeshCore version and starts again at 1 on the next one. Development builds report `v1.18.0-meshnomad.dev.<build>-<commit>` — see [Versions](#versions). | 1.18.0 |
 | Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
 | CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app), `get build` (which firmware build this is, e.g. `heltec_v4_mn_rpt`). | 1.18.0 |
-| Network (ESP32) | MeshCore has WiFi only in its separate companion WiFi builds (the app connects to the companion over WiFi); the companion here keeps exactly that. This fork's own code (`src/helpers/net/`) adds WiFi for the repeater and room server with a password-protected TCP console on port 5000, MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `net status|scan|apply`). | 1.18.0 |
+| Network (ESP32) | MeshCore has WiFi only in its separate companion WiFi builds (the app connects to the companion over WiFi); the companion here keeps exactly that. This fork's own code (`src/helpers/net/`) adds WiFi for the repeater and room server with a password-protected TLS console on port 5000 (see the next row), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `ota.timeout`, `net.cert`, `net status|scan|apply`, `net ota …`, `net cert renew`). | 1.18.0 |
 | Firmware per role | One firmware per ESP32 board and role: repeater `<board>_mn_rpt`, companion `<board>_mn_cmp` (Bluetooth, USB and WiFi at the same time), room server `<board>_mn_rs`. Every role contains the network layer (WiFi, MQTT, NTP, observer; the repeater and room server add a TCP console), all off by default. Boards without WiFi, and boards that cannot hold a role's full feature set, get no MeshNomad firmware — see [Supported boards](#supported-boards). Release builds have debug logging switched off. | 1.18.0 |
 | Bluetooth PIN | The companion pairs with PIN `123456` on every board. MeshCore picks a random PIN at every start on boards with a display. A PIN set with `set pin` or in the app still takes precedence. | 1.18.0 |
 | Sensors | INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by their chip ID, so an INA219 on 0x40 still works). | 1.18.0 |
 | Passwords | `get wifi.pwd` (all roles, including the companion), `get mqtt.pwd` reply `> (set)` when a password is stored and `> (not set)` when it is empty; the password itself is never sent back. `set wifi.pwd` and `set mqtt.pwd` are unchanged. Not changed, as in MeshCore: the reply to `password <new>` still echoes the new admin password, and `get guest.password` still shows the guest password. | 1.18.0 |
+| TLS network console (breaking change) | Port 5000 is TLS-only: plain `nc` or telnet no longer works. Connect with `openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`, then type the admin password as before. Each node makes its own ECDSA P-256 key and a self-signed certificate (CN = node id, O = node name) on the first boot with WiFi on; this takes about 1 s, and the node pauses for that time. `net cert renew` makes a new one. To verify the node, compare `get net.cert` (`> sha256:<hex>`) with `openssl s_client -connect <ip>:5000 </dev/null \| openssl x509 -outform DER \| sha256sum`. The console and `net ota start` refuse while the admin password is the factory default or empty: `Error: change the admin password first (password <new>)`. A failed TLS handshake counts as a failed login (3 failures lock that IP for 5 minutes). The handshake takes about 2.4 s on an ESP32-S3, and during it the node does not process LoRa packets. `openssl s_client -quiet` implies `-ign_eof`, so it keeps waiting after the node closes the session: press Enter or Ctrl+C. Repeater and room server only. | 1.18.0 |
+| `net ota` | Firmware update over the network, separate from MeshCore's `start ota` (which opens an access point). `net ota start` serves a page at `https://<ip>/update` on port 443; log in as `admin` with the admin password and upload the `<board>_mn_<role>-<version>.bin` file. The certificate is self-signed, so the browser shows a warning once per node. `start ota` is refused while WiFi is on (`Error: WiFi on - use net ota start, or set wifi.enabled 0`) or while a `net ota` session runs (`Error: net ota session active (net ota stop first)`). A failed or interrupted upload never reboots the node and keeps the old firmware. The session ends after `ota.timeout` seconds without data. Repeater and room server only; the companion has no `net ota`, `ota.*` or `net.cert`. | 1.18.0 |
+| Dropped boards | The TLS console and `net ota` add about 150 KB, which does not fit in the flash of these boards, so they get no MeshNomad repeater and no room server firmware: `Ebyte_EoRa-S3`, `Generic_E22_sx1262`, `Generic_E22_sx1268`, `LilyGo_T3S3_sx1262`, `LilyGo_T3S3_sx1276`, `LilyGo_TBeam_1W`, `Station_G2`, `Station_G2_logging`, `Station_G3_ESP32`, `Station_G3_ESP32_logging`, `Tenstar_C3_sx1262`, `Tenstar_C3_sx1268`, `ThinkNode_M2`, `ThinkNode_M5`, `Xiao_C3` (15 boards, both roles). `LilyGo_TLora_V2_1_1_6` loses its room server only (flash 95.4 % full); its repeater stays. Use the original MeshCore firmware there. | 1.18.0 |
 
 ## Commands
 
@@ -120,7 +123,7 @@ discovery, NTP, the observer, `wifi.power` and `net …` — is this fork's own 
 Roles: repeater, room server and companion on ESP32 boards. Everything here is off by default.
 On the companion, WiFi itself (`wifi.ssid`, `wifi.pwd`, `wifi.enabled`, …) is MeshCore's own and
 works as in MeshCore; this fork adds `wifi.power`, `mqtt.*`, `ntp.*`, `obs.*`, `net.telemetry`,
-`net status` and `net apply`. The companion has no `tcp.enabled` and no `net scan`.
+`net status` and `net apply`. The companion has no `tcp.enabled`, `net scan`, `net ota`, `net cert`, `net.cert` or `ota.timeout`.
 On the room server the network console (`tcp.enabled`) asks for the room server's admin password.
 
 | Command | What it does | Values | Default |
@@ -131,7 +134,13 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 | `get/set wifi.enabled <0\|1>` | Turns WiFi on or off, immediately. On a repeater with `powersaving on`, WiFi keeps the board out of light sleep, which would drop the WiFi link; the room server and companion on ESP32 do not sleep, with or without WiFi. | `0`, `1` | `0` |
 | `get wifi.status`, `get wifi.ip` | Connection state, IP address. | — | — |
 | `get/set wifi.power <dBm>` | WiFi transmit power, applied immediately; `0` = chip default. | dBm | `0` |
-| `get/set tcp.enabled <0\|1>` | Console over the network: TCP port 5000, asks for the node's admin password. Needs WiFi. Applied immediately. | `0`, `1` | `0` |
+| `get/set tcp.enabled <0\|1>` | Console over the network: TLS on TCP port 5000, asks for the node's admin password. Connect with `openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`; plain `nc` does not work. Needs WiFi and a non-default admin password. Applied immediately. | `0`, `1` | `0` |
+| `get net.cert` | SHA-256 fingerprint of the node's certificate, `> sha256:<hex>`. Read-only. Before the first boot with WiFi on: `Error: no certificate yet, set wifi.enabled 1 first`. | — | — |
+| `net cert renew` | Makes a new key and certificate (about 1 s) and replies with the new fingerprint. Needs WiFi on (`Error: WiFi off, set wifi.enabled 1 first`). An open console session stays on the old certificate until it disconnects. | — | — |
+| `net ota start` | Starts the network firmware update: replies `> https://<ip>/update (600 s)`, or `(no limit)` when `ota.timeout` is `0`. Refuses with `Error: WiFi not connected (wl=<n>)`, `Error: change the admin password first (password <new>)`, `Error: not enough memory`, or `Error: MeshCore OTA access point active, reboot first`. Running it again while a session runs restarts the timeout. | — | — |
+| `net ota stop` | Ends the session (`> net ota stopped`; `> off` when none runs). An upload in progress is aborted, the node does not reboot. | — | — |
+| `net ota status` | `> off`, `> on https://<ip>/update left:<seconds\|-> upload:<bytes\|idle>`, `> stopping` or `> update done, restarting`. | — | — |
+| `get/set ota.timeout <s>` | How long a `net ota` session waits without data before it ends; `0` = no limit. | `0`–`86400` seconds | `600` |
 | `get/set mqtt.enabled <0\|1>` | Sends telemetry to an MQTT broker, with Home Assistant discovery. Needs WiFi and `mqtt.host`. | `0`, `1` | `0` |
 | `get/set mqtt.host`, `mqtt.port`, `mqtt.user`, `mqtt.pwd`, `mqtt.topic` | Broker address, port, login, password, base topic. `get mqtt.pwd` replies `> (set)` or `> (not set)`, never the password. | text, number | empty, `1883`, empty, empty, `meshcore` |
 | `get/set net.telemetry <seconds>` | How often telemetry is sent. | seconds | `60` |
@@ -144,14 +153,18 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 | `net scan` | Lists WiFi networks in range (takes 2–3 s). | — | — |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*`, `obs.*` settings without a reboot. | — | — |
 
-Network console login (`tcp.enabled 1`): connect to port 5000 and type the node's admin
-password (the one set with `password <new>`).
+Network console login (`tcp.enabled 1`): connect with TLS to port 5000
+(`openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`) and type the node's
+admin password (the one set with `password <new>`). The node's certificate is self-signed;
+check it against `get net.cert` (see [Differences from MeshCore](#differences-from-meshcore)).
+`openssl s_client -quiet` keeps waiting after the node closes the session — press Enter or Ctrl+C.
 
 - The password must be typed within 15 seconds of connecting, otherwise the connection is closed.
-- An empty admin password is never accepted — set one first.
+- An empty admin password is never accepted, and neither is the factory default: the console answers `Error: change the admin password first (password <new>)` — set one first.
 - After 3 wrong passwords from one IP address, that address gets `Denied` for 5 minutes
   (each new attempt restarts the 5 minutes); other addresses can still log in. The node
-  remembers up to 16 addresses.
+  remembers up to 16 addresses. A failed TLS handshake counts as a failed login; a locked
+  address is closed before the handshake. The `net ota` page shares this lockout.
 - An idle logged-in session is closed after 120 seconds.
 
 Example — join WiFi, open the network console, send telemetry, set the clock:
