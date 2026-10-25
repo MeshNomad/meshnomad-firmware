@@ -904,9 +904,6 @@ void MyMesh::formatPacketStatsReply(char *reply) {
 }
 
 void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply) {
-#ifdef WITH_NET_SERVICES
-  if (net_handle_cli(command, reply, 160)) return;
-#endif
   if (region_load_active) {
     if (StrHelper::isBlank(command)) {  // empty/blank line, signal to terminate 'load' operation
       region_map = temp_map;  // copy over the temp instance as new current map
@@ -949,6 +946,11 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     reply += 3;
     command += 3;
   }
+
+#ifdef WITH_NET_SERVICES
+  // MeshNomad: after the prefix strip, so 'xx|set wifi.ssid ..' from the app reaches the net layer
+  if (net_handle_cli(command, reply, 157)) return;
+#endif
 
   // handle ACL related commands
   if (memcmp(command, "setperm ", 8) == 0) {   // format:  setperm {pubkey-hex} {permissions-int8}

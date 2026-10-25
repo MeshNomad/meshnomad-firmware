@@ -2084,9 +2084,6 @@ void MyMesh::enterCLIRescue() {
 }
 
 bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char* reply) {
-#ifdef WITH_NET_SERVICES
-  if (net_handle_cli(command, reply, 160)) return true;
-#endif
   while (*command == ' ') command++; // skip leading spaces
 
   if (strlen(command) > 4 && command[2] == '|') { // optional prefix (for companion radio CLI)
@@ -2095,6 +2092,11 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     *reply = 0;
     command += 3;
   }
+
+#ifdef WITH_NET_SERVICES
+  // MeshNomad: after the prefix strip, so 'xx|set wifi.ssid ..' from the app reaches the net layer
+  if (net_handle_cli(command, reply, 157)) return true;
+#endif
 
   if (_prefs.getRadioPrefs()->handleCommand(command, sender_timestamp, reply)) {  // is radio CLI command?
     if (_prefs.getRadioPrefs()->isDirty()) { savePrefs(); }
