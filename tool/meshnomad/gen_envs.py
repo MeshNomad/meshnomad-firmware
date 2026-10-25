@@ -141,6 +141,9 @@ def render_env(board: str, role: str, base: str, opts: dict) -> str:
                 src.append("${mn_cmp_wifi.build_src_filter}")
             flags.append("${mn_cmp_net.build_flags}")
         flags.append("${mn_esp32_net.build_flags}")
+        if role != "cmp":
+            # TLS console (NetTls) runs in loop(): larger loop task stack, rpt/rs only
+            flags.append("${mn_esp32_tls.build_flags}")
         src.append("${mn_esp32_net.build_src_filter}")
         libs.append("${mn_esp32_net.lib_deps}")
     flags.append("${mn_release.build_flags}")

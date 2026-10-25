@@ -75,8 +75,11 @@ static wifi_power_t dbmToPower(int d) {
 
 // ---- lifecycle ----
 void NetServices::begin(const char* node_id, CmdFn cmd, TelemFn telem, SetTimeFn set_time,
-                        PasswordFn console_password, InhibitSleepFn inhibit_sleep) {
+                        PasswordFn console_password, InhibitSleepFn inhibit_sleep,
+                        const char* default_password, const char* node_name) {
   strlcpy(_node_id, node_id, sizeof(_node_id));
+  _default_password = default_password;
+  _node_name = node_name;
   _cmd = cmd;
   _telem = telem;
   _set_time = set_time;
@@ -100,7 +103,7 @@ void NetServices::loop() {
 
   if (WiFi.status() != WL_CONNECTED) {
     ntpStop();                 // re-armed on reconnect
-    if (_cli_client) cliReset();
+    if (_cli_srv.connected()) cliReset();
     unsigned long now = millis();
     if (_cfg.wifi_ssid[0] && now - _last_wifi_retry > 10000UL) {
       _last_wifi_retry = now;
@@ -130,11 +133,8 @@ void NetServices::stopAll() {
   ntpStop();
   _discovery_sent = false;
 #ifndef NET_WIFI_EXTERNAL
-  if (_cli_listening) {
-    _cli_server.stop();
-    _cli_listening = false;
-  }
   cliReset();
+  _cli_srv.end();              // listener closed; the key/cert stay loaded
   if (_wifi_started) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
@@ -154,6 +154,7 @@ void NetServices::applyWifiState() {
     applyWifiPower();
     _wifi_started = true;
     _last_wifi_retry = millis();
+    ensureTls();               // after WIFI_STA: the radio feeds the hardware RNG
   } else if (!_cfg.wifi_enabled && _wifi_started) {
     stopAll();
   }
@@ -210,16 +211,36 @@ void NetServices::ntpLoop() {
   }
 }
 
-// ---- TCP console ----
-// Protocol: "Password: " -> password + "\n" -> "OK\r\n> " or "Denied\r\n" (closed);
-// each reply "  -> <reply>\r\n" followed by "> "; idle timeout 120 s.
+#ifndef NET_WIFI_EXTERNAL
+// ---- TLS console ----
+// TLS only (no plain fallback): `openssl s_client -quiet -connect <ip>:5000`.
+// Protocol after the handshake: "Password: " -> password + "\n" -> "OK\r\n> " or
+// "Denied\r\n" (closed); each reply "  -> <reply>\r\n" followed by "> "; idle timeout 120 s.
 // Login rules: the password must be entered within 15 s of connecting; an empty
 // node password never matches; 3 failed logins lock that client IP out for
-// 5 minutes (it keeps getting "Denied" without the password being checked).
+// 5 minutes (the socket is then closed before any handshake). While the admin
+// password is still the compiled default the console refuses every login (gate).
 static const unsigned long LOGIN_DEADLINE_MS = 15000UL;
 static const uint8_t       LOGIN_MAX_FAILS   = 3;
 static const unsigned long LOGIN_LOCKOUT_MS  = 300000UL;
+static const uint32_t      CLI_HANDSHAKE_MS  = 4000;      // loop() is blocked at most this long
+static const char* const   PW_GATE_MSG = "Error: change the admin password first (password <new>)";
 
+void NetServices::ensureTls() {
+  if (NetTls::ready()) return;
+  if (!NetTls::ensure(_node_id, _node_name ? _node_name : "")) {
+    Serial.println("NetServices: no TLS certificate, console stays closed");
+  }
+}
+
+bool NetServices::adminPasswordIsDefault() const {
+  const char* pw = _console_password ? _console_password() : nullptr;
+  if (!pw || !pw[0]) return true;
+  return _default_password && strcmp(pw, _default_password) == 0;
+}
+
+// Unlocked core; the table is shared with the httpd task (NetOta), so every entry
+// point goes through the lockout*() wrappers below.
 NetServices::LoginFail* NetServices::loginFailEntry(uint32_t ip, bool create) {
   LoginFail* oldest = &_login_fail[0];
   for (LoginFail& e : _login_fail) {
@@ -248,37 +269,119 @@ void NetServices::recordLoginFailure(uint32_t ip) {
   e->last_ms = millis();
 }
 
+// Thread-safe wrappers (portMUX critical section: no blocking calls inside).
+bool NetServices::lockoutCheck(uint32_t ip) {
+  portENTER_CRITICAL(&_lockout_mux);
+  bool locked = isLockedOut(ip);
+  portEXIT_CRITICAL(&_lockout_mux);
+  return locked;
+}
+
+void NetServices::lockoutFail(uint32_t ip) {
+  portENTER_CRITICAL(&_lockout_mux);
+  recordLoginFailure(ip);
+  portEXIT_CRITICAL(&_lockout_mux);
+}
+
+void NetServices::lockoutOk(uint32_t ip) {
+  portENTER_CRITICAL(&_lockout_mux);
+  LoginFail* e = loginFailEntry(ip, false);
+  if (e) e->count = 0;
+  portEXIT_CRITICAL(&_lockout_mux);
+}
+
 void NetServices::applyTcpState() {
-  bool want = _wifi_started && _cfg.tcp_enabled;
-  if (want && !_cli_listening) {
-    _cli_server.begin(TCP_CLI_PORT);
-    _cli_listening = true;
-  } else if (!want && _cli_listening) {
-    _cli_server.stop();
-    _cli_listening = false;
+  // No certificate (generation failed) means no listener: there is no plain mode.
+  bool want = _wifi_started && _cfg.tcp_enabled && NetTls::ready();
+  if (want && !_cli_srv.listening()) {
+    static unsigned long last_try = 0;         // retry a failed bind every 5 s, not per pass
+    if (millis() - last_try < 5000UL && last_try) return;
+    last_try = millis();
+    if (!_cli_srv.begin(TCP_CLI_PORT)) Serial.println("NetServices: console listen failed");
+  } else if (!want && _cli_srv.listening()) {
     cliReset();
+    _cli_srv.end();
   }
 }
 
 void NetServices::cliReset() {
-  if (_cli_client) _cli_client.stop();
+  _cli_srv.disconnect();       // frees the TLS session; idempotent
   _cli_authed = false;
   _cli_len = 0;
 }
 
-void NetServices::cliLoop() {
-  if (!_cli_listening) return;
-  if (!_cli_client || !_cli_client.connected()) {
-    WiFiClient nc = _cli_server.available();
-    if (nc) {
-      _cli_client = nc;
-      _cli_authed = false;
-      _cli_len = 0;
-      _cli_last_activity = millis();
-      _cli_connected_at = _cli_last_activity;
-      _cli_ip = (uint32_t)_cli_client.remoteIP();
-      _cli_client.print("Password: ");
+// Prints the peer address the way the operator sees it in the boot log.
+static void fmtIp(uint32_t raw, char* out, size_t n) {
+  snprintf(out, n, "%u.%u.%u.%u", (unsigned)(raw & 0xff), (unsigned)((raw >> 8) & 0xff),
+           (unsigned)((raw >> 16) & 0xff), (unsigned)((raw >> 24) & 0xff));
+}
+
+void NetServices::cliAccept() {
+  uint32_t ip = 0;
+  int fd = _cli_srv.pollAccept(&ip);
+  if (fd < 0) return;
+  char ip_s[16];
+  fmtIp(ip, ip_s, sizeof(ip_s));
+  if (lockoutCheck(ip)) {      // locked out: no TLS work at all for this peer
+    NetTls::Server::reject(fd);
+    Serial.printf("NetServices: console %s locked out, closed\n", ip_s);
+    return;
+  }
+  // Blocks loop() for the handshake (software ECDHE/ECDSA) or up to CLI_HANDSHAKE_MS
+  // for a silent peer such as plain `nc`.
+  if (!_cli_srv.handshake(fd, CLI_HANDSHAKE_MS)) {
+    lockoutFail(ip);           // LOCKOUT-HS: a failed/aborted handshake = one failed login
+    Serial.printf("NetServices: console %s TLS handshake failed after %lu ms\n",
+                  ip_s, (unsigned long)_cli_srv.handshakeMs());
+    return;
+  }
+  Serial.printf("NetServices: console %s TLS handshake %lu ms\n",
+                ip_s, (unsigned long)_cli_srv.handshakeMs());
+  _cli_authed = false;
+  _cli_len = 0;
+  _cli_last_activity = millis();
+  _cli_connected_at = _cli_last_activity;
+  _cli_ip = ip;
+  if (adminPasswordIsDefault()) {   // gate: not a failed login, no lockout count
+    _cli_srv.print(PW_GATE_MSG);
+    _cli_srv.print("\r\n");
+    cliReset();
+    return;
+  }
+  _cli_srv.print("Password: ");
+}
+
+void NetServices::cliLine() {
+  _cli_line[_cli_len] = 0;
+  if (!_cli_authed) {
+    const char* pw = _console_password ? _console_password() : nullptr;
+    if (!lockoutCheck(_cli_ip) && pw && pw[0] && strcmp(_cli_line, pw) == 0) {
+      lockoutOk(_cli_ip);
+      _cli_authed = true;
+      _cli_srv.print("OK\r\n> ");
+    } else {
+      lockoutFail(_cli_ip);
+      _cli_srv.print("Denied\r\n");
+      cliReset();
     }
+  } else if (_cli_len > 0) {
+    char reply[160];
+    reply[0] = 0;
+    if (_cmd) _cmd(_cli_line, reply, sizeof(reply));
+    if (reply[0]) {
+      _cli_srv.print("  -> ");
+      _cli_srv.print(reply);
+      _cli_srv.print("\r\n");
+    }
+    _cli_srv.print("> ");
+  }
+  _cli_len = 0;
+}
+
+void NetServices::cliLoop() {
+  if (!_cli_srv.listening()) return;
+  if (!_cli_srv.connected()) {
+    cliAccept();
     return;
   }
 
@@ -288,42 +391,23 @@ void NetServices::cliLoop() {
     return;
   }
 
-  while (_cli_client.available()) {
-    char c = _cli_client.read();
+  char buf[64];
+  int r;
+  while (_cli_srv.connected() && (r = _cli_srv.readSome(buf, sizeof(buf))) != 0) {
+    if (r < 0) {               // peer closed or TLS error: the session is gone already
+      cliReset();
+      return;
+    }
     _cli_last_activity = millis();
-    if (c == '\r') continue;
-    if (c == '\n') {
-      _cli_line[_cli_len] = 0;
-      if (!_cli_authed) {
-        const char* pw = _console_password ? _console_password() : nullptr;
-        if (!isLockedOut(_cli_ip) && pw && pw[0] && strcmp(_cli_line, pw) == 0) {
-          LoginFail* e = loginFailEntry(_cli_ip, false);
-          if (e) e->count = 0;
-          _cli_authed = true;
-          _cli_client.print("OK\r\n> ");
-        } else {
-          recordLoginFailure(_cli_ip);
-          _cli_client.print("Denied\r\n");
-          cliReset();
-          return;
-        }
-      } else if (_cli_len > 0) {
-        char reply[160];
-        reply[0] = 0;
-        if (_cmd) _cmd(_cli_line, reply, sizeof(reply));
-        if (reply[0]) {
-          _cli_client.print("  -> ");
-          _cli_client.print(reply);
-          _cli_client.print("\r\n");
-        }
-        _cli_client.print("> ");
-      }
-      _cli_len = 0;
-    } else if (_cli_len < (int)sizeof(_cli_line) - 1) {
-      _cli_line[_cli_len++] = c;
+    for (int i = 0; i < r && _cli_srv.connected(); i++) {
+      char c = buf[i];
+      if (c == '\r') continue;
+      if (c == '\n') cliLine();                 // may reset the session (Denied)
+      else if (_cli_len < (int)sizeof(_cli_line) - 1) _cli_line[_cli_len++] = c;
     }
   }
 }
+#endif // !NET_WIFI_EXTERNAL
 
 // ---- network CLI ----
 // Reply format follows the companion's WiFi commands: every reply starts with "> ".
@@ -332,7 +416,7 @@ void NetServices::cliLoop() {
 static bool isOwnedKey(const char* key) {
   static const char* const KEYS[] = {
 #ifndef NET_WIFI_EXTERNAL
-    "wifi.ssid", "wifi.pwd", "wifi.enabled", "wifi.status", "wifi.ip", "tcp.enabled",
+    "wifi.ssid", "wifi.pwd", "wifi.enabled", "wifi.status", "wifi.ip", "tcp.enabled", "net.cert",
 #endif
     "wifi.power",
     "mqtt.enabled", "mqtt.host", "mqtt.port", "mqtt.user", "mqtt.pwd", "mqtt.topic",
@@ -391,6 +475,22 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     snprintf(reply, n, "> wifi config cleared");
     return true;
   }
+  if (!strcmp(command, "net cert renew")) {
+    // Needs the radio on for the hardware RNG. Blocks for the key generation; an open
+    // console session keeps running on the old certificate until it disconnects.
+    if (!_wifi_started) {
+      snprintf(reply, n, "Error: WiFi off, set wifi.enabled 1 first");
+      return true;
+    }
+    if (!NetTls::renew(_node_id, _node_name ? _node_name : "")) {
+      snprintf(reply, n, "Error: certificate generation failed");
+      return true;
+    }
+    char fp[80];
+    NetTls::fingerprint(fp, sizeof(fp));
+    snprintf(reply, n, "> %s", fp);
+    return true;
+  }
 #endif
   if (!strcmp(command, "net apply")) {
     _apply_pending = true;
@@ -411,6 +511,13 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     }
     else if (!strcmp(key, "wifi.power"))    snprintf(reply, n, "> %d", _cfg.wifi_power);
     else if (!strcmp(key, "tcp.enabled"))   snprintf(reply, n, "> %d", _cfg.tcp_enabled ? 1 : 0);
+#ifndef NET_WIFI_EXTERNAL
+    else if (!strcmp(key, "net.cert")) {    // SHA-256 of the certificate DER, never the key
+      char fp[80];
+      if (NetTls::fingerprint(fp, sizeof(fp))) snprintf(reply, n, "> %s", fp);
+      else snprintf(reply, n, "Error: no certificate yet, set wifi.enabled 1 first");
+    }
+#endif
     else if (!strcmp(key, "mqtt.enabled"))  snprintf(reply, n, "> %d", _cfg.mqtt_enabled ? 1 : 0);
     else if (!strcmp(key, "mqtt.host"))     snprintf(reply, n, "> %s", _cfg.mqtt_host);
     else if (!strcmp(key, "mqtt.port"))     snprintf(reply, n, "> %d", _cfg.mqtt_port);
@@ -436,7 +543,8 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     if (klen >= sizeof(key)) return false;
     memcpy(key, rest, klen);
     key[klen] = 0;
-    if (!isOwnedKey(key) || !strcmp(key, "wifi.status") || !strcmp(key, "wifi.ip")) return false;
+    if (!isOwnedKey(key) || !strcmp(key, "wifi.status") || !strcmp(key, "wifi.ip") ||
+        !strcmp(key, "net.cert")) return false;   // read-only keys
     const char* val = sp + 1;
 
     int num = atoi(val);

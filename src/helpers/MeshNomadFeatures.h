@@ -25,6 +25,9 @@ inline void meshnomadFeatures(char* out, size_t n) {
 #ifdef WITH_NET_SERVICES
   add("mqtt"); add("ntp"); add("observer");
 #endif
+#if defined(ESP32) && defined(WITH_NET_SERVICES) && !defined(NET_WIFI_EXTERNAL)
+  add("tls");    // network console over TLS (NetTls); not in the companion
+#endif
 #if defined(WITH_BRIDGE) || defined(WITH_RS232_BRIDGE) || defined(WITH_ESPNOW_BRIDGE)
   add("bridge");
 #endif

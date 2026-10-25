@@ -8,6 +8,13 @@
 
 extern MyMesh the_mesh;
 
+// Mirror of the default in MyMesh.cpp (upstream keeps it in the .cpp, so it is not
+// visible here). A -D ADMIN_PASSWORD build flag reaches both places. The network
+// console and 'net ota' refuse to log in while the node still uses this password.
+#ifndef ADMIN_PASSWORD
+  #define ADMIN_PASSWORD "password"
+#endif
+
 static NetServices net;
 
 static float batt_pct_from_mv(uint16_t mv) {
@@ -62,7 +69,9 @@ void meshnomad_net_setup() {
   // Observer origin = node name at boot; a rename applies after a reboot.
   net.setObserverInfo(obs_id, the_mesh.getNodePrefs()->node_name,
                       board.getManufacturerName(), FIRMWARE_VERSION);
-  net.begin(node_id, net_cmd, net_telem, net_set_time, net_console_password, net_inhibit_sleep);
+  // The node name goes into the TLS certificate (O=); the node id is its CN.
+  net.begin(node_id, net_cmd, net_telem, net_set_time, net_console_password, net_inhibit_sleep,
+            ADMIN_PASSWORD, the_mesh.getNodePrefs()->node_name);
 }
 
 void meshnomad_net_loop() {

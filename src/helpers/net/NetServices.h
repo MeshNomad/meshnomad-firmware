@@ -2,7 +2,7 @@
 
 // NetServices: network layer for MeshCore nodes on ESP32.
 //  - WiFi station with non-blocking reconnect and configurable TX power
-//  - password-protected TCP console that feeds the node's CLI
+//  - password-protected network console over TLS (NetTls) that feeds the node's CLI
 //  - MQTT telemetry with Home Assistant discovery and online/offline status
 //  - SNTP clock sync into the node's RTC
 //  - MQTT packet observer (every received packet, raw hex + RF metrics)
@@ -17,6 +17,9 @@
 #include <PubSubClient.h>
 #include <math.h>            // NAN / isnan for optional sensor fields
 #include "NetConfig.h"
+#ifndef NET_WIFI_EXTERNAL
+  #include "NetTls.h"        // TLS console; empty in the companion build
+#endif
 
 // Snapshot of node telemetry, filled by the role via a callback. Optional fields
 // default to NAN ("not present"); state and discovery skip them while NAN.
@@ -56,8 +59,12 @@ typedef void (*InhibitSleepFn)(bool inhibit);
 class NetServices {
 public:
   // node_id: short hex id used in MQTT topics and Home Assistant ids. Copied.
+  // default_password: the compiled admin password (ADMIN_PASSWORD); while the node still
+  // uses it (or an empty one) the console and 'net ota' refuse to log in. node_name goes
+  // into the certificate (O=). Both may be nullptr where there is no console (companion).
   void begin(const char* node_id, CmdFn cmd, TelemFn telem, SetTimeFn set_time,
-             PasswordFn console_password, InhibitSleepFn inhibit_sleep);
+             PasswordFn console_password, InhibitSleepFn inhibit_sleep,
+             const char* default_password = nullptr, const char* node_name = nullptr);
 
   // Call from the main loop() only. Non-blocking; never stalls mesh routing.
   void loop();
@@ -75,8 +82,22 @@ public:
 
   bool isWifiConnected() const { return WiFi.status() == WL_CONNECTED; }
 
+#ifndef NET_WIFI_EXTERNAL
+  // True while the admin password is the compiled default or empty (login gate for the
+  // console and 'net ota start').
+  bool adminPasswordIsDefault() const;
+
+  // Login lockout shared by the console and the HTTPS login (3 failures -> 5 min per
+  // IP). Thread-safe: callable from the httpd task as well as from loop().
+  bool lockoutCheck(uint32_t ip);     // true = refuse without checking the password
+  void lockoutFail(uint32_t ip);
+  void lockoutOk(uint32_t ip);        // successful login: forget the failures
+#endif
+
 private:
   char _node_id[24] = {0};
+  const char* _node_name = nullptr;         // not copied: points into the node prefs
+  const char* _default_password = nullptr;  // compiled ADMIN_PASSWORD literal
   CmdFn          _cmd   = nullptr;
   TelemFn        _telem = nullptr;
   SetTimeFn      _set_time = nullptr;
@@ -103,10 +124,9 @@ private:
   void ntpLoop();
   void ntpStop();
 
-  // ---- TCP console ----
-  WiFiServer _cli_server;
-  WiFiClient _cli_client;
-  bool  _cli_listening = false;
+#ifndef NET_WIFI_EXTERNAL
+  // ---- TLS console (port TCP_CLI_PORT, one client) ----
+  NetTls::Server _cli_srv;      // listener + the one TLS session (~40 KB only while connected)
   bool  _cli_authed = false;
   char  _cli_line[160];
   int   _cli_len = 0;
@@ -122,12 +142,18 @@ private:
   };
   static const int LOGIN_FAIL_SLOTS = 16;   // 16 x 12 B
   LoginFail _login_fail[LOGIN_FAIL_SLOTS] = {};
+  portMUX_TYPE _lockout_mux = portMUX_INITIALIZER_UNLOCKED;   // guards _login_fail
+  // Unlocked table access; only the lockout*() wrappers may call these.
   LoginFail* loginFailEntry(uint32_t ip, bool create);
   bool isLockedOut(uint32_t ip);
   void recordLoginFailure(uint32_t ip);
+  void ensureTls();             // key/cert present once WiFi is up
   void applyTcpState();         // start/stop the listener to match the config
   void cliLoop();
+  void cliAccept();             // lockout check -> handshake -> gate -> prompt
+  void cliLine();               // one complete console line (login or command)
   void cliReset();
+#endif
 
   // ---- MQTT ----
   WiFiClient    _mqtt_wifi;
