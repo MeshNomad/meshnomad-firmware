@@ -72,8 +72,11 @@ def main() -> int:
     if changed:
         envs = ", ".join(f"`{env}`" for env in changed)
         print(f"**Full reset required** for {envs}: the partition table changed since {prev}. "
-              "Flash the `-merged.bin` file at 0x0; updating with the `.bin` file at 0x10000 "
-              "will not start.")
+              "Over OTA the larger image is refused (`start ota` fails during the upload, "
+              "`net ota` refuses it before the upload with \"image larger than the OTA slot\"); "
+              "the `.bin` flashed over USB at 0x10000 will not start. "
+              "Flash the `-merged.bin` file over USB at 0x0; the node starts with a new identity "
+              "and default settings.")
     else:
         print(f"Partition tables unchanged since {prev}: the `.bin` file at 0x10000 updates "
               "every board and keeps its settings.")

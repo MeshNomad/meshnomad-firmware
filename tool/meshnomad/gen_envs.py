@@ -86,14 +86,10 @@ SKIP: dict[tuple[str, str], str] = {
     ("ThinkNode_M2", "cmp"): "BLE, USB, WiFi and network layer exceed flash",
     ("ThinkNode_M5", "cmp"): "BLE, USB, WiFi and network layer exceed flash",
     # TLS console + net ota (+~150 KB) — 2026-10-25
-    ("Station_G2", "rpt"): "TLS console and network OTA exceed flash",
-    ("Station_G2", "rs"): "TLS console and network OTA exceed flash",
-    ("Station_G2_logging", "rpt"): "TLS console and network OTA exceed flash",
-    ("Station_G2_logging", "rs"): "TLS console and network OTA exceed flash",
-    ("Station_G3_ESP32", "rpt"): "TLS console and network OTA exceed flash",
-    ("Station_G3_ESP32", "rs"): "TLS console and network OTA exceed flash",
-    ("Station_G3_ESP32_logging", "rpt"): "TLS console and network OTA exceed flash",
-    ("Station_G3_ESP32_logging", "rs"): "TLS console and network OTA exceed flash",
+    ("Station_G2_logging", "rpt"): "logging variant not released (operator B43-4 C)",
+    ("Station_G2_logging", "rs"): "logging variant not released (operator B43-4 C)",
+    ("Station_G3_ESP32_logging", "rpt"): "logging variant not released (operator B43-4 C)",
+    ("Station_G3_ESP32_logging", "rs"): "logging variant not released (operator B43-4 C)",
     ("Xiao_C3", "rpt"): "TLS console and network OTA exceed flash",
     ("Xiao_C3", "rs"): "TLS console and network OTA exceed flash",
     ("Tenstar_C3_sx1262", "rpt"): "TLS console and network OTA exceed flash",
@@ -119,6 +115,15 @@ SKIP: dict[tuple[str, str], str] = {
     ("LilyGo_TLora_V2_1_1_6", "rs"): "TLS console and network OTA exceed flash (95.4 %)",
 }
 NO_NET: dict[tuple[str, str], str] = {}
+
+# Extra ``key = value`` lines for every generated env of a board (all roles), after the
+# standard keys. Station G2 / G3 ESP32 have 16 MB flash but MeshCore sets no partition table,
+# so they would get the 4 MB default.csv (app slot 1280K); the framework's default_16MB.csv
+# (app0/app1 6400K, spiffs 3456K) is the same table as Heltec V4 (operator B43-1 A).
+BOARD_OPTS: dict[str, dict[str, str]] = {
+    "Station_G2": {"board_build.partitions": "default_16MB.csv"},
+    "Station_G3_ESP32": {"board_build.partitions": "default_16MB.csv"},
+}
 
 SUFFIX = {
     "rpt": ("_repeater",),
@@ -199,6 +204,7 @@ def render_env(board: str, role: str, base: str, opts: dict) -> str:
         if values:
             lines.append(f"{key} =")
             lines.extend(f"  {v}" for v in values)
+    lines.extend(f"{key} = {value}" for key, value in BOARD_OPTS.get(board, {}).items())
     return "\n".join(lines)
 
 

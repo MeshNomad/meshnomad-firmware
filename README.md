@@ -58,7 +58,7 @@ listed below.
 | Passwords | `get wifi.pwd` (all roles, including the companion), `get mqtt.pwd` reply `> (set)` when a password is stored and `> (not set)` when it is empty; the password itself is never sent back. `set wifi.pwd` and `set mqtt.pwd` are unchanged. Not changed, as in MeshCore: the reply to `password <new>` still echoes the new admin password, and `get guest.password` still shows the guest password. | 1.18.0 |
 | TLS network console (breaking change) | Port 5000 is TLS-only: plain `nc` or telnet no longer works. Connect with `openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`, then type the admin password as before. Each node makes its own ECDSA P-256 key and a self-signed certificate (CN = node id, O = node name) on the first boot with WiFi on; this takes about 1 s, and the node pauses for that time. `net cert renew` makes a new one. To verify the node, compare `get net.cert` (`> sha256:<hex>`) with `openssl s_client -connect <ip>:5000 </dev/null \| openssl x509 -outform DER \| sha256sum`. The console and `net ota start` refuse while the admin password is the factory default or empty: `Error: change the admin password first (password <new>)`. A failed TLS handshake counts as a failed login (3 failures lock that IP for 5 minutes). The handshake takes about 2.4 s on an ESP32-S3, and during it the node does not process LoRa packets. `openssl s_client -quiet` implies `-ign_eof`, so it keeps waiting after the node closes the session: press Enter or Ctrl+C. Repeater and room server only. | 1.18.0 |
 | `net ota` | Firmware update over the network, separate from MeshCore's `start ota` (which opens an access point). `net ota start` serves a page at `https://<ip>/update` on port 443; log in as `admin` with the admin password and upload the `<board>_mn_<role>-<version>.bin` file. The certificate is self-signed, so the browser shows a warning once per node. `start ota` is refused while WiFi is on (`Error: WiFi on - use net ota start, or set wifi.enabled 0`) or while a `net ota` session runs (`Error: net ota session active (net ota stop first)`). A failed or interrupted upload never reboots the node and keeps the old firmware. The session ends after `ota.timeout` seconds without data. Repeater and room server only; the companion has no `net ota`, `ota.*` or `net.cert`. | 1.18.0 |
-| Dropped boards | The TLS console and `net ota` add about 150 KB, which does not fit in the flash of these boards, so they get no MeshNomad repeater and no room server firmware: `Ebyte_EoRa-S3`, `Generic_E22_sx1262`, `Generic_E22_sx1268`, `LilyGo_T3S3_sx1262`, `LilyGo_T3S3_sx1276`, `LilyGo_TBeam_1W`, `Station_G2`, `Station_G2_logging`, `Station_G3_ESP32`, `Station_G3_ESP32_logging`, `Tenstar_C3_sx1262`, `Tenstar_C3_sx1268`, `ThinkNode_M2`, `ThinkNode_M5`, `Xiao_C3` (15 boards, both roles). `LilyGo_TLora_V2_1_1_6` loses its room server only (flash 95.4 % full); its repeater stays. Use the original MeshCore firmware there. | 1.18.0 |
+| Dropped boards | The TLS console and `net ota` add about 150 KB, which does not fit in the flash of these boards, so they get no MeshNomad repeater and no room server firmware: `Ebyte_EoRa-S3`, `Generic_E22_sx1262`, `Generic_E22_sx1268`, `LilyGo_T3S3_sx1262`, `LilyGo_T3S3_sx1276`, `LilyGo_TBeam_1W`, `Tenstar_C3_sx1262`, `Tenstar_C3_sx1268`, `ThinkNode_M2`, `ThinkNode_M5`, `Xiao_C3` (11 boards, both roles). `LilyGo_TLora_V2_1_1_6` loses its room server only (flash 95.4 % full); its repeater stays. Use the original MeshCore firmware there. `Station_G2` and `Station_G3_ESP32` are back: they get a 16 MB partition table (`default_16MB.csv`, as Heltec V4) that holds the larger image; their `_logging` variants are not released. | 1.18.0 |
 
 ## Commands
 
@@ -228,6 +228,8 @@ cannot hold it (see the table below).
 | `Meshadventurer_sx1268` | `meshadventurer` | ✓ | — | ✓ |
 | `meshnology_w12` | `meshnology` | ✓ | ✓ | ✓ |
 | `RAK_3112` | `rak` | ✓ | ✓ | ✓ |
+| `Station_G2` | `bq` | ✓ | — | ✓ |
+| `Station_G3_ESP32` | `bq` | ✓ | — | ✓ |
 | `T_Beam_S3_Supreme_SX1262` | `lilygo` | ✓ | ✓ | ✓ |
 | `Tbeam_SX1262` | `lilygo` | ✓ | — | ✓ |
 | `Tbeam_SX1276` | `lilygo` | ✓ | — | ✓ |
@@ -290,6 +292,10 @@ repository already uses esptool 4.8.1.
 Each release's notes say whether a board's partition table changed since the previous
 release. If it did, that board needs the `-merged.bin` file at 0x0; otherwise the `.bin`
 file at 0x10000 updates it and keeps its settings.
+
+`Station_G2` and `Station_G3_ESP32`: the first MeshNomad release with the 16 MB partition table
+needs a USB flash of the `-merged.bin` at 0x0. The larger `.bin` is refused over OTA. The node
+starts fresh (new identity, settings and certificate); nothing can preserve the old ones.
 
 ## Versions
 
