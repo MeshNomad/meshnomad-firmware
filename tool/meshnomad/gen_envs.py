@@ -79,8 +79,6 @@ SKIP: dict[tuple[str, str], str] = {
     ("M5Stack_Unit_C6L", "cmp"): "BLE, USB, WiFi and network layer exceed flash",
     ("Meshadventurer_sx1262", "cmp"): "BLE, USB, WiFi and network layer exceed RAM",
     ("Meshadventurer_sx1268", "cmp"): "BLE, USB, WiFi and network layer exceed RAM",
-    ("Station_G2", "cmp"): "MeshCore's own BLE companion exceeds flash",
-    ("Station_G3_ESP32", "cmp"): "MeshCore's own BLE companion exceeds flash",
     ("Tbeam_SX1262", "cmp"): "BLE, USB, WiFi and network layer exceed RAM",
     ("Tbeam_SX1276", "cmp"): "BLE, USB, WiFi and network layer exceed RAM",
     ("ThinkNode_M2", "cmp"): "BLE, USB, WiFi and network layer exceed flash",
