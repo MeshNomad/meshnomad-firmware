@@ -62,3 +62,12 @@ strings, not line numbers. Inventory from `git diff main --diff-filter=M`.
 | `.github/workflows/pr-build-check.yml` | `branches: [dev-meshnomad, main-meshnomad]`, `paths:`, env matrix | PR checks on our branches and our build envs | Keep ours; take only structural upstream changes. |
 | `.github/workflows/run-unit-tests.yml` | `branches: [dev-meshnomad, main-meshnomad]`, `paths-ignore`, no `push:` | Unit tests only on PRs to our branches, skip docs-only | Keep ours. |
 | `README.md` | whole file | MeshNomad README replaces MeshCore's | Keep ours; do not take upstream README changes. |
+
+## Deleted upstream files
+
+A MeshCore merge brings these back; delete them again (operator 2026-10-26, B22/B23).
+
+| File | Purpose of the deletion | How to re-apply on a MeshCore update |
+|---|---|---|
+| `.github/workflows/github-pages.yml`, `mkdocs.yml`, `docs/docs.md` | No MeshCore documentation site (GitHub Pages / MkDocs) in this repo | Delete again. |
+| `SECURITY.md`, `CONTRIBUTING.md` | MeshCore's version table, reporting channel and contribution rules do not apply to MeshNomad | Delete again. |
