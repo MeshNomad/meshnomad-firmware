@@ -279,15 +279,19 @@ bool NetOta::start(const NetOtaHooks& hooks, uint32_t timeout_s) {
   conf.transport_mode = HTTPD_SSL_TRANSPORT_SECURE;
   conf.port_secure    = 443;
   conf.httpd.stack_size        = 10240;
-  conf.httpd.max_open_sockets  = 1;     // one TLS session (~40 KB heap)
+  conf.httpd.max_open_sockets  = 2;     // browsers open two connections (page + preconnect); ~40 KB heap each
   conf.httpd.max_uri_handlers  = 3;
   conf.httpd.backlog_conn      = 2;
   conf.httpd.lru_purge_enable  = true;  // a new connection replaces an idle one
   conf.httpd.recv_wait_timeout = NET_OTA_RECV_TIMEOUT_S;
-  conf.httpd.send_wait_timeout = 10;
-  // Never above loopTask; off the mesh loop's core where there are two cores.
+  conf.httpd.send_wait_timeout = NET_OTA_RECV_TIMEOUT_S;  // same budget both ways (weak WiFi)
+  // Never above loopTask. Two cores: core 0 (off the mesh loop) at idle priority, so IDLE0 keeps
+  // running during back-to-back TLS handshakes (~3 s each) and the task watchdog, which checks
+  // IDLE0 only (5 s), does not reset the board. One core: same priority as loopTask, or it starves.
+#if CONFIG_FREERTOS_UNICORE
   conf.httpd.task_priority     = tskIDLE_PRIORITY + 1;
-#if !CONFIG_FREERTOS_UNICORE
+#else
+  conf.httpd.task_priority     = tskIDLE_PRIORITY;
   conf.httpd.core_id           = 0;
 #endif
 

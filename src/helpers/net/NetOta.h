@@ -25,7 +25,7 @@ struct NetOtaHooks {
 };
 
 #ifndef NET_OTA_RECV_TIMEOUT_S
-  #define NET_OTA_RECV_TIMEOUT_S 30     // socket timeout per read/handshake step
+  #define NET_OTA_RECV_TIMEOUT_S 30     // socket timeout per read/write/handshake step
 #endif
 
 struct NetOtaHttp;                      // HTTP handlers (NetOta.cpp)
