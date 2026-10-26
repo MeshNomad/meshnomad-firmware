@@ -112,6 +112,7 @@ SKIP: dict[tuple[str, str], str] = {
     ("LilyGo_T3S3_sx1276", "rs"): "TLS console and network OTA exceed flash",
     ("Ebyte_EoRa-S3", "rpt"): "TLS console and network OTA exceed flash",
     ("Ebyte_EoRa-S3", "rs"): "TLS console and network OTA exceed flash",
+    ("LilyGo_TLora_V2_1_1_6", "rpt"): "TLS console and network OTA exceed flash (96.5 %)",
     ("LilyGo_TLora_V2_1_1_6", "rs"): "TLS console and network OTA exceed flash (95.4 %)",
 }
 NO_NET: dict[tuple[str, str], str] = {}

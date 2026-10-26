@@ -44,7 +44,6 @@ on:
           - lilygo
           - lilygo/lilygo_tdeck
           - lilygo/lilygo_teth_elite_sx1262
-          - lilygo/lilygo_tlora_v2_1_1_6
           - lilygo/t_beam_s3_supreme_sx1262
           - lilygo/tbeam_sx1262
           - lilygo/tbeam_sx1276
