@@ -91,4 +91,9 @@ struct NetConfig {
 
   // Assigns one stored key (as written by save()). False if the key is unknown.
   bool assign(const char* key, const char* val);
+
+  // Longest value a text key can hold (buffer size - 1); -1 for numeric or unknown keys.
+  // assign() still truncates (load() reads values that were saved within the limit);
+  // the CLI checks this first and refuses longer input.
+  static int maxLen(const char* key);
 };

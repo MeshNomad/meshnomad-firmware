@@ -128,8 +128,8 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 
 | Command | What it does | Values | Default |
 |---|---|---|---|
-| `get/set wifi.ssid <name>` | WiFi network name. | text | empty |
-| `get/set wifi.pwd <password>` | WiFi password. `get` does not show it: the reply is `> (set)` or `> (not set)`. | text | empty |
+| `get/set wifi.ssid <name>` | WiFi network name. | text, max 32 chars | empty |
+| `get/set wifi.pwd <password>` | WiFi password. `get` does not show it: the reply is `> (set)` or `> (not set)`. | text, max 64 chars | empty |
 | `set wifi.clear` | Empties the WiFi name and password. | — | — |
 | `get/set wifi.enabled <0\|1>` | Turns WiFi on or off, immediately. On a repeater with `powersaving on`, WiFi keeps the board out of light sleep, which would drop the WiFi link; the room server and companion on ESP32 do not sleep, with or without WiFi. | `0`, `1` | `0` |
 | `get wifi.status`, `get wifi.ip` | Connection state, IP address. | — | — |
@@ -142,12 +142,12 @@ On the room server the network console (`tcp.enabled`) asks for the room server'
 | `net ota status` | `> off`, `> on https://<ip>/update left:<seconds\|-> upload:<bytes\|idle>`, `> stopping` or `> update done, restarting`. | — | — |
 | `get/set ota.timeout <s>` | How long a `net ota` session waits without data before it ends; `0` = no limit. | `0`–`86400` seconds | `600` |
 | `get/set mqtt.enabled <0\|1>` | Sends telemetry to an MQTT broker, with Home Assistant discovery. Needs WiFi and `mqtt.host`. | `0`, `1` | `0` |
-| `get/set mqtt.host`, `mqtt.port`, `mqtt.user`, `mqtt.pwd`, `mqtt.topic` | Broker address, port, login, password, base topic. `get mqtt.pwd` replies `> (set)` or `> (not set)`, never the password. | text, number | empty, `1883`, empty, empty, `meshcore` |
+| `get/set mqtt.host`, `mqtt.port`, `mqtt.user`, `mqtt.pwd`, `mqtt.topic` | Broker address, port, login, password, base topic. `get mqtt.pwd` replies `> (set)` or `> (not set)`, never the password. A longer value is refused with `Error, max N chars` and nothing changes. | `mqtt.host` text, max 63 chars; `mqtt.port` number; `mqtt.user` text, max 32 chars; `mqtt.pwd` text, max 64 chars; `mqtt.topic` text, max 23 chars | empty, `1883`, empty, empty, `meshcore` |
 | `get/set net.telemetry <seconds>` | How often telemetry is sent. | seconds | `60` |
 | `get/set ntp.enabled <0\|1>` | Sets the node's clock from an NTP server. Needs WiFi. | `0`, `1` | `0` |
-| `get/set ntp.server <host>`, `ntp.interval <seconds>` | NTP server; how often the clock is set again. | text, seconds | `pool.ntp.org`, `90000` |
+| `get/set ntp.server <host>`, `ntp.interval <seconds>` | NTP server; how often the clock is set again. | `ntp.server` text, max 63 chars; `ntp.interval` seconds | `pool.ntp.org`, `90000` |
 | `get/set obs.enabled <0\|1>` | Observer: publishes every packet this node hears to MQTT, topic `<obs.topic>/<IATA>/<node key>/rx`. Needs MQTT and `obs.iata`. | `0`, `1` | `0` |
-| `get/set obs.iata <code>` | Area code used in the observer topics, e.g. `WAW`. | text | empty |
+| `get/set obs.iata <code>` | Area code used in the observer topics, e.g. `WAW`. | text, max 7 chars | empty |
 | `get/set obs.topic <topic>` | Root of the observer topics, separate from `mqtt.topic`. | text, max 23 chars | `meshcore` |
 | `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, packet counters. | — | — |
 | `net scan` | Lists WiFi networks in range (takes 2–3 s). | — | — |

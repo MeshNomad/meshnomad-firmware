@@ -5,6 +5,19 @@
 
 #define NETCFG_FILE "/netcfg"
 
+int NetConfig::maxLen(const char* k) {
+  if (!strcmp(k, "wifi.ssid"))   return sizeof(NetConfig::wifi_ssid) - 1;
+  if (!strcmp(k, "wifi.pwd"))    return sizeof(NetConfig::wifi_pwd) - 1;
+  if (!strcmp(k, "mqtt.host"))   return sizeof(NetConfig::mqtt_host) - 1;
+  if (!strcmp(k, "mqtt.user"))   return sizeof(NetConfig::mqtt_user) - 1;
+  if (!strcmp(k, "mqtt.pwd"))    return sizeof(NetConfig::mqtt_pwd) - 1;
+  if (!strcmp(k, "mqtt.topic"))  return sizeof(NetConfig::mqtt_topic) - 1;
+  if (!strcmp(k, "ntp.server"))  return sizeof(NetConfig::ntp_server) - 1;
+  if (!strcmp(k, "obs.iata"))    return sizeof(NetConfig::obs_iata) - 1;
+  if (!strcmp(k, "obs.topic"))   return sizeof(NetConfig::obs_topic) - 1;
+  return -1;
+}
+
 bool NetConfig::assign(const char* k, const char* v) {
   if      (!strcmp(k, "wifi.enabled"))  wifi_enabled = (atoi(v) != 0);
   else if (!strcmp(k, "wifi.ssid"))     strlcpy(wifi_ssid, v, sizeof(wifi_ssid));

@@ -712,6 +712,11 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
       snprintf(reply, n, "Error, minimum is 60 s");
       return true;
     }
+    int max_len = NetConfig::maxLen(key);       // text keys: refuse, never truncate
+    if (max_len >= 0 && strlen(val) > (size_t)max_len) {
+      snprintf(reply, n, "Error, max %d chars", max_len);
+      return true;
+    }
     bool ota_stopped = false;
 #ifndef NET_WIFI_EXTERNAL
     if (!strcmp(key, "ota.timeout")) {          // digits only: 'abc' must not mean "no limit"
