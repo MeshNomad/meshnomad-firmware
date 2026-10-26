@@ -890,9 +890,16 @@ void NetServices::setObserverInfo(const char* observer_id, const char* origin,
   strlcpy(_obs_id, observer_id, sizeof(_obs_id));
   strlcpy(_obs_model, model, sizeof(_obs_model));
   strlcpy(_obs_fw, fw_version, sizeof(_obs_fw));
+  _obs_origin_src = origin;    // the node name in the prefs: 'set name' rewrites it in place
+  syncObsOrigin();
+}
+
+// Re-read the node name before every observer publish, so a rename applies without a reboot.
+void NetServices::syncObsOrigin() {
+  if (!_obs_origin_src) return;
   // origin goes inside JSON string literals: drop characters that would break them
   int j = 0;
-  for (const char* p = origin; *p && j < (int)sizeof(_obs_origin) - 1; p++) {
+  for (const char* p = _obs_origin_src; *p && j < (int)sizeof(_obs_origin) - 1; p++) {
     if (*p != '"' && *p != '\\') _obs_origin[j++] = *p;
   }
   _obs_origin[j] = 0;
@@ -930,6 +937,7 @@ void NetServices::observerDrain() {
     snprintf(topic, sizeof(topic), "%s/%s/%s/rx", _cfg.obs_topic, _cfg.obs_iata, _obs_id);
 
     static char payload[640];                // 510 hex + JSON wrapper
+    syncObsOrigin();
     int len = snprintf(payload, sizeof(payload), "{\"origin\":\"%s\",\"raw\":\"", _obs_origin);
     for (int i = 0; i < p.len && len < (int)sizeof(payload) - 40; i++) {
       len += snprintf(payload + len, sizeof(payload) - len, "%02x", p.raw[i]);
@@ -948,6 +956,7 @@ void NetServices::publishObsStatus(const Telemetry& t) {
   if (!observerActive()) return;
   char topic[120];
   snprintf(topic, sizeof(topic), "%s/%s/%s/status", _cfg.obs_topic, _cfg.obs_iata, _obs_id);
+  syncObsOrigin();
   char payload[320];
   snprintf(payload, sizeof(payload),
     "{\"origin\":\"%s\",\"model\":\"%s\",\"firmware_version\":\"%s\","

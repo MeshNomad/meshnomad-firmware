@@ -200,6 +200,8 @@ private:
   uint32_t _obs_published = 0;
   char _obs_id[65]     = {0};
   char _obs_origin[33] = {0};
+  const char* _obs_origin_src = nullptr;   // not copied: points into the node prefs
+  void syncObsOrigin();
   char _obs_model[33]  = {0};
   char _obs_fw[33]     = {0};
   void observerDrain();

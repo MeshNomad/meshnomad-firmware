@@ -66,7 +66,7 @@ void meshnomad_net_setup() {
   static char node_id[7];
   static char obs_id[65];
   net_make_ids(the_mesh.self_id.pub_key, node_id, obs_id);
-  // Observer origin = node name at boot; a rename applies after a reboot.
+  // Observer origin = the node name, re-read at every publish (a rename applies at once).
   net.setObserverInfo(obs_id, the_mesh.getNodePrefs()->node_name,
                       board.getManufacturerName(), FIRMWARE_VERSION);
   // The node name goes into the TLS certificate (O=); the node id is its CN.
