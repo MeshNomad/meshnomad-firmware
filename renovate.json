@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "baseBranchPatterns": ["dev-meshnomad"],
+  "enabledManagers": ["github-actions"],
+  "timezone": "Europe/Warsaw",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "dependencyDashboardOSVVulnerabilitySummary": "unresolved",
+  "prConcurrentLimit": 5,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "automerge": false
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": false
+    }
+  ]
+}
