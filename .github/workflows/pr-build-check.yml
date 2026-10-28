@@ -27,10 +27,8 @@ jobs:
           - heltec_v4_mn_rpt
           - heltec_v4_mn_cmp
           - heltec_v4_mn_rs
-          # ESP32-C3
-          - Xiao_C3_mn_rpt
+          # ESP32-C3 (companion only; repeater and room server cannot hold TLS, see tool/meshnomad/gen_envs.py)
           - Xiao_C3_mn_cmp
-          - Xiao_C3_mn_rs
           # ESP32
           - Tbeam_SX1262_mn_rpt
           # ESP32-C6
