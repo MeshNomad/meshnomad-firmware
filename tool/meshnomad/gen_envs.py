@@ -235,7 +235,7 @@ def render_table(released: dict[str, set[str]]) -> str:
         "|---|---|---|---|---|",
     ]
     for board in sorted(released, key=str.lower):
-        marks = " | ".join("✓" if role in released[board] else "—" for role in ROLES)
+        marks = " | ".join("yes" if role in released[board] else "no" for role in ROLES)
         lines.append(f"| `{board}` | `{vendor_of(board) or '?'}` | {marks} |")
     return "\n".join([*lines, README_END]) + "\n"
 

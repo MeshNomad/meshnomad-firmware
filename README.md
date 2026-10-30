@@ -1,78 +1,333 @@
+<p align="center">
+  <img src="docs/assets/meshnomad-lockup.svg" alt="MeshNomad" width="160">
+</p>
+
 # MeshNomad Firmware
 
-Firmware for LoRa mesh radios used by the MeshNomad app — a fork of
-[MeshCore](https://github.com/meshcore-dev/MeshCore) that stays as close to the
-original as possible.
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](license.txt)
+[![Latest release](https://img.shields.io/github/v/release/MeshNomad/meshnomad-firmware)](https://github.com/MeshNomad/meshnomad-firmware/releases)
 
-> **Not affiliated with the MeshCore project.** This is an independent fork. For
-> MeshCore itself, its documentation, community and official releases, go to
+Firmware for ESP32 LoRa mesh radios used with the MeshNomad app. It is a fork of
+[MeshCore](https://github.com/meshcore-dev/MeshCore) that keeps MeshCore's radio
+protocol and routing untouched and adds network features on top.
+
+Downloads: [Releases](https://github.com/MeshNomad/meshnomad-firmware/releases)
+App: [MeshNomad app](https://github.com/MeshNomad/meshnomad)
+Website: https://meshnomad.org
+
+> MeshNomad is an independent fork and is not affiliated with the MeshCore project.
+> For MeshCore itself, its documentation, community and releases, see
 > [meshcore-dev/MeshCore](https://github.com/meshcore-dev/MeshCore).
 
-## What you get
+Contents: [What MeshNomad is](#what-meshnomad-is) |
+[Features by role](#features-by-role) | [Supported boards](#supported-boards) |
+[Download and flash](#download-and-flash) | [First setup](#first-setup) |
+[Network features](#network-features) | [Security notes](#security-notes) |
+[Differences from MeshCore](#differences-from-meshcore) | [Commands](#commands) |
+[Building from source](#building-from-source) | [Release channels](#release-channels) |
+[Development](#development) | [Licence and credits](#licence-and-credits)
 
-MeshNomad firmware is MeshCore plus:
+## What MeshNomad is
 
-- **One firmware per board and role, for ESP32 boards.** No choosing between Bluetooth, USB
-  and WiFi builds: everything is inside, and the extra features are switched on at runtime
-  from the MeshNomad app or the console.
-- **Network features:** WiFi, a password-protected network console (repeater, room
-  server), MQTT telemetry with Home Assistant discovery, NTP clock sync and an MQTT packet
-  observer. All off until you switch them on.
-- **Sensor and build commands:** `sensor read`, `sensor scan`, `get features`, which
-  lets the MeshNomad app show only the commands your firmware has, and `get build`, which
-  tells it which firmware file fits the device.
-- **2-byte path hash by default** on a fresh install.
+MeshNomad firmware is MeshCore with additions around the core. The radio layer, the
+packet format and the routing are MeshCore's, so a MeshNomad node works in any MeshCore
+mesh next to nodes running the original firmware. Every MeshCore release is merged into
+this fork; nothing is sent back upstream.
 
-The radio, the protocol and the routing are MeshCore's, so a MeshNomad node works with any
-MeshCore node in the same mesh. Details: [Differences from MeshCore](#differences-from-meshcore)
-and [Commands](#commands).
+The additions are built into every firmware and switched on at runtime, from the
+MeshNomad app or the console. A freshly flashed node behaves like a MeshCore node with
+two exceptions: it uses a 2-byte path hash by default, and a companion pairs with a fixed
+Bluetooth PIN. Both can be changed.
 
-## Origin
+The MeshNomad app also works with original MeshCore firmware. It detects which firmware
+a node runs and offers only the commands that exist there.
 
-- Forked from `meshcore-dev/MeshCore`.
-- Every MeshCore release is merged into this fork; nothing from this fork is sent
-  back upstream.
-- Licence: MIT, unchanged — see [`license.txt`](license.txt). All MeshCore code
-  keeps its original copyright.
+## Features by role
 
-## Fork rule
+One firmware per board and role. Everything below is off until you turn it on.
 
-We practically do not modify code that touches communication — the protocol,
-routing and the radio layer stay exactly as in MeshCore, so these nodes work in
-any MeshCore mesh. Around it we improve what exists and add our own features.
-Some of them are on by default and some MeshCore defaults are changed — on
-purpose. Every difference from MeshCore, and whether it is on by default, is
-listed below.
+**Repeater** (`<board>_mn_rpt`) and **room server** (`<board>_mn_rs`)
+
+- WiFi with a password-protected console over TLS on port 5000.
+- Firmware update over the network from a browser (`net ota`).
+- MQTT telemetry with Home Assistant discovery, NTP clock sync, and an MQTT packet
+  observer that publishes every packet the node hears.
+- `sensor read` and `sensor scan` for live sensor values and an I2C wiring check.
+
+**Companion** (`<board>_mn_cmp`)
+
+- Bluetooth, USB and WiFi in one firmware; MeshCore ships these as separate builds.
+- Pairs with PIN `123456` on every board. A PIN set with `set pin` or in the app
+  still takes precedence.
+- WiFi settings and the app connection over WiFi work exactly as in MeshCore: the
+  settings apply after a reboot and the app talks to the companion on port 5000.
+- MQTT telemetry, NTP and the observer as on the other roles. No network console and no
+  `net ota`: the companion is updated over USB.
+- Its USB port speaks the app protocol, not text, so there is no serial console. Commands
+  reach a companion from the app, or as remote admin over LoRa from a contact you allowed
+  remote CLI.
+
+**All roles**
+
+- `get features` tells the app which features this build contains; `get build` tells it
+  which firmware file fits the device.
+- 2-byte path hash by default on a fresh install (`set path.hash.mode` changes it).
+- INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by
+  their chip ID, so an INA219 on 0x40 still works).
+
+## Supported boards
+
+MeshNomad firmware is released for ESP32 boards, and only where a board can hold the
+full feature set of a role. The TLS console and `net ota` make the repeater and room
+server images larger, and the companion carries Bluetooth, USB, WiFi and the network
+layer at once; a board whose flash or RAM cannot hold that gets no MeshNomad firmware
+for the role. Boards based on nRF52, RP2040 or STM32 get none at all. For every other
+board, and for the roles marked `no` below, use the original
+[MeshCore firmware](https://github.com/meshcore-dev/MeshCore/releases); the MeshNomad
+app works with it too.
+
+The board name is the start of the firmware file name; the vendor is used to pick boards
+for development builds.
+
+<!-- >>> supported boards (generated by tool/meshnomad/gen_envs.py) -->
+| Board | Vendor | Repeater | Companion | Room server |
+|---|---|---|---|---|
+| `Heltec_ct62` | `heltec` | yes | yes | no |
+| `Heltec_E213` | `heltec` | yes | yes | yes |
+| `Heltec_E290` | `heltec` | yes | no | yes |
+| `heltec_rc32` | `heltec` | yes | yes | yes |
+| `heltec_rc32_without_display` | `heltec` | yes | yes | yes |
+| `heltec_tracker_v2` | `heltec` | yes | yes | yes |
+| `Heltec_v2` | `heltec` | yes | no | yes |
+| `Heltec_v3` | `heltec` | yes | yes | yes |
+| `heltec_v4` | `heltec` | yes | yes | yes |
+| `heltec_v4_expansionkit` | `heltec` | yes | no | no |
+| `heltec_v4_r8` | `heltec` | yes | yes | yes |
+| `heltec_v4_r8_tft` | `heltec` | yes | yes | yes |
+| `heltec_v4_tft` | `heltec` | yes | yes | yes |
+| `Heltec_Wireless_Paper` | `heltec` | yes | yes | yes |
+| `Heltec_Wireless_Tracker` | `heltec` | yes | yes | yes |
+| `Heltec_WSL3` | `heltec` | yes | yes | yes |
+| `LilyGo_TDeck` | `lilygo` | yes | yes | no |
+| `LilyGo_TETH_Elite_sx1262` | `lilygo` | yes | yes | yes |
+| `M5Stack_Unit_C6L` | `m5stack` | yes | no | yes |
+| `Meshadventurer_sx1262` | `meshadventurer` | yes | no | yes |
+| `Meshadventurer_sx1268` | `meshadventurer` | yes | no | yes |
+| `meshnology_w12` | `meshnology` | yes | yes | yes |
+| `RAK_3112` | `rak` | yes | yes | yes |
+| `Station_G2` | `bq` | yes | yes | yes |
+| `Station_G3_ESP32` | `bq` | yes | yes | yes |
+| `T_Beam_S3_Supreme_SX1262` | `lilygo` | yes | yes | yes |
+| `Tbeam_SX1262` | `lilygo` | yes | no | yes |
+| `Tbeam_SX1276` | `lilygo` | yes | no | yes |
+| `ThinkNode_M7` | `elecrow` | yes | yes | yes |
+| `Waveshare_S3_LR1121` | `waveshare` | yes | yes | yes |
+| `Xiao_C3` | `seeed` | no | yes | no |
+| `Xiao_S3` | `seeed` | yes | yes | yes |
+| `Xiao_S3_WIO` | `seeed` | yes | yes | yes |
+<!-- <<< supported boards -->
+
+## Download and flash
+
+Every release ships two files per board and role:
+
+| File | Contains | Write it at |
+|---|---|---|
+| `<board>_mn_<role>-<version>-merged.bin` | bootloader, partition table and firmware | `0x0` |
+| `<board>_mn_<role>-<version>.bin` | firmware only | `0x10000` |
+
+**New board, or a move from other firmware.** Write the `-merged.bin` file at `0x0`
+with [esptool](https://github.com/espressif/esptool), using the chip of your board
+(`esp32`, `esp32s3`, `esp32c3`, `esp32c6`):
+
+```
+esptool.py --chip esp32s3 write_flash 0x0 <board>_mn_<role>-<version>-merged.bin
+```
+
+The `-merged.bin` file also overwrites the `nvs` area, so Bluetooth pairings are lost and
+the phone has to pair again. The node's identity key and contacts live in the file-system
+partition, which neither file touches. A full chip erase (`esptool.py erase_flash`)
+removes them too.
+
+**Updating a node that already runs MeshNomad.** Two ways keep the node's identity,
+contacts and settings:
+
+- `net ota` in a browser (repeater and room server): upload the `.bin` file on the
+  node's update page. See [Network firmware update](#network-firmware-update).
+- The `-merged.bin` file at `0x0` over USB, for every role.
+
+The plain `.bin` at `0x10000` also works, but only on a node that has never been updated
+over the air: after an OTA update the node starts from its second firmware slot, and a
+file written at `0x10000` is ignored. When in doubt, use one of the two ways above.
+
+Each release's notes say whether a board's partition table changed since the previous
+release. If it did, that board needs the `-merged.bin` file once; `net ota` refuses an
+image that does not fit the firmware slot.
+
+`Station_G2` and `Station_G3_ESP32` use a 16 MB partition table. Moving to the first
+MeshNomad release with that table needs a USB flash of the `-merged.bin` at `0x0`; the node
+starts fresh (new identity, settings and certificate), and nothing can preserve the old
+ones.
+
+Use esptool 4.8 or newer. Some boards connect through the chip's own USB, and the port
+shows up as "USB JTAG/serial debug unit" (for example Heltec V4 and T-Beam S3 Supreme).
+If an upload to such a board is interrupted, older esptool versions cannot flash it
+again: the chip resets during the erase and the upload fails with
+`Could not configure port: (5, 'Input/output error')`.
+
+## First setup
+
+The steps below use the console: the USB serial port on a repeater or room server, the
+MeshNomad app's node console, or remote admin over LoRa. `get <key>` shows a value,
+`set <key> <value>` changes and saves it.
+
+1. Set the admin password. The network console and `net ota` refuse to start while the
+   password is empty or still the factory default.
+
+       password <new-password>
+
+2. Join a WiFi network. WiFi starts at once on a repeater or room server; a companion
+   needs a reboot.
+
+       set wifi.ssid <network>
+       set wifi.pwd <password>
+       set wifi.enabled 1
+       get wifi.ip
+
+3. Open the network console (repeater and room server). It speaks TLS only, so plain
+   `nc` or telnet does not connect.
+
+       set tcp.enabled 1
+
+   Then, from your computer:
+
+       openssl s_client -quiet -connect <ip>:5000
+       ncat --ssl <ip> 5000
+
+   Type the admin password at the prompt. After the node closes the session,
+   `openssl s_client -quiet` keeps waiting; press Enter or Ctrl+C.
+
+4. Check that you are talking to your node. Each node generates its own key and
+   self-signed certificate on the first boot with WiFi on. Compare the fingerprint the
+   node reports with the one your computer sees:
+
+       get net.cert
+       openssl s_client -connect <ip>:5000 </dev/null | openssl x509 -outform DER | sha256sum
+
+   `net cert renew` generates a new key and certificate.
+
+Login rules, shared by the console and the `net ota` page: the password must arrive
+within 15 seconds of connecting; after three failures from one address that address is
+denied for five minutes (each new attempt restarts the five minutes); a failed TLS
+handshake counts as a failure; an idle session is closed after 120 seconds.
+
+From here, continue with [Network features](#network-features) to turn on MQTT, NTP,
+the observer or a network firmware update.
+
+## Network features
+
+All of them need WiFi (step 2 of [First setup](#first-setup)). Switches take effect
+without a reboot on a repeater or room server; on a companion, WiFi itself needs a reboot
+and the rest follows `net apply`.
+
+### MQTT and Home Assistant
+
+`set mqtt.host <broker>` and `set mqtt.enabled 1` start telemetry: battery, uptime, free
+heap, neighbour count, packet counters, last RSSI and SNR, noise floor, and the values of
+connected sensors (temperature, humidity, pressure, up to three current channels). The
+node publishes to `<mqtt.topic>/<node id>/state` every `net.telemetry` seconds, keeps
+`<mqtt.topic>/<node id>/status` at `online` or `offline`, and announces its sensors
+through Home Assistant discovery, so they appear in Home Assistant without manual setup.
+
+### Clock from NTP
+
+`set ntp.enabled 1` sets the node's clock from `ntp.server` (UTC) and refreshes it every
+`ntp.interval` seconds, so a node without a GPS keeps the right time across reboots.
+
+### Packet observer
+
+`set obs.iata <code>` and `set obs.enabled 1` publish every packet the node hears to
+`<obs.topic>/<area code>/<node key>/rx` as raw hex with SNR and RSSI, plus a status
+message with the node name, model and firmware version. The topic root is separate from
+`mqtt.topic`, so an observer can feed a public packet collector while telemetry stays on
+your own broker. Needs MQTT.
+
+### Network console
+
+`set tcp.enabled 1` opens the TLS console on port 5000 (repeater and room server). It
+takes the same commands as the serial console and asks for the admin password first;
+see [First setup](#first-setup) for the connection commands and the login rules. One
+session at a time. The TLS handshake takes a few seconds on an ESP32, and the node
+pauses mesh work for that time.
+
+### Network firmware update
+
+`net ota start` (repeater and room server) serves an update page at `https://<ip>/update`
+and replies with that address. In the browser:
+
+- The certificate is the node's own self-signed one, so the browser warns once per node.
+- The first page load takes several seconds: the TLS handshake runs in software on the
+  ESP32. The browser may open two connections; the node allows two at most.
+- The page asks for the admin password and the `<board>_mn_<role>-<version>.bin` file.
+  A wrong password counts towards the lockout shared with the console.
+- A failed or interrupted upload never reboots the node; the old firmware stays. After a
+  successful upload the page says so and the node restarts into the new firmware.
+
+The session ends after `ota.timeout` seconds without data (600 by default, `0` means no
+limit); `net ota status` shows the time left and the upload progress, `net ota stop` ends
+it. Running `net ota start` again while a session runs only restarts the timeout.
+`net scan`, `net apply` and `set wifi.enabled 0` end a running session first.
+
+MeshCore's own `start ota` is unchanged and still available: it opens the `MeshCore-OTA`
+access point. It is refused while WiFi is on or while a `net ota` session runs.
+
+## Security notes
+
+- The network console speaks TLS only; there is no plain-text mode. Each node generates
+  its own ECDSA P-256 key and a self-signed certificate (CN = node id, O = node name) on
+  the first boot with WiFi on. `get net.cert` shows the SHA-256 fingerprint for a manual
+  check; `net cert renew` replaces the key and certificate.
+- The console and `net ota` refuse every login while the admin password is empty or the
+  factory default, and share one lockout table (the login rules in
+  [First setup](#first-setup) apply to both).
+- `get wifi.pwd` and `get mqtt.pwd` reply `(set)` or `(not set)`, never the password.
+  As in MeshCore, the reply to `password <new>` echoes the new admin password and
+  `get guest.password` shows the guest password.
+- MeshCore's `start ota` opens an access point without a password, as in the original
+  firmware. Prefer `net ota`, which stays on your WiFi network and asks for the admin
+  password over TLS.
+- `set` refuses a text value longer than its field (`Error, max <n> chars`) instead of
+  cutting it, so a stored WiFi or MQTT password is always exactly what you typed.
 
 ## Differences from MeshCore
 
-| Area | What is different | Since |
+| Area | MeshCore | MeshNomad |
 |---|---|---|
-| Releases | Own release builds from `rpt-v…`, `cmp-v…`, `rs-v…` tags (repeater, companion, room server). The firmware reports its version as `v<MeshCore version>-meshnomad.<release>-<commit>`, e.g. `v1.18.0-meshnomad.2-9f3c2a1`; the number after `meshnomad.` counts our releases on that MeshCore version and starts again at 1 on the next one. Development builds report `v1.18.0-meshnomad.dev.<build>-<commit>` — see [Versions](#versions). | 1.18.0 |
-| Path hash | `path.hash.mode` defaults to `1` (2-byte path hash) on a fresh install; change it with `set path.hash.mode`. Existing settings are kept. | 1.18.0 |
-| CLI | New commands: `sensor read` (live sensor values), `sensor scan` (I2C addresses on the sensor bus), `get features` (what this build contains, used by the MeshNomad app), `get build` (which firmware build this is, e.g. `heltec_v4_mn_rpt`). | 1.18.0 |
-| Network (ESP32) | MeshCore has WiFi only in its separate companion WiFi builds (the app connects to the companion over WiFi); the companion here keeps exactly that. This fork's own code (`src/helpers/net/`) adds WiFi for the repeater and room server with a password-protected TLS console on port 5000 (see the next row), MQTT telemetry with Home Assistant discovery, SNTP clock sync and an MQTT packet observer. All of it is off by default and switched on with `set wifi.enabled 1`, `set tcp.enabled 1`, `set mqtt.enabled 1`, `set ntp.enabled 1`, `set obs.enabled 1`; settings via CLI (`wifi.*`, `tcp.enabled`, `mqtt.*`, `ntp.*`, `obs.*`, `ota.timeout`, `net.cert`, `net status|scan|apply`, `net ota …`, `net cert renew`). | 1.18.0 |
-| Firmware per role | One firmware per ESP32 board and role: repeater `<board>_mn_rpt`, companion `<board>_mn_cmp` (Bluetooth, USB and WiFi at the same time), room server `<board>_mn_rs`. Every role contains the network layer (WiFi, MQTT, NTP, observer; the repeater and room server add a TCP console), all off by default. Boards without WiFi, and boards that cannot hold a role's full feature set, get no MeshNomad firmware — see [Supported boards](#supported-boards). Release builds have debug logging switched off. | 1.18.0 |
-| Bluetooth PIN | The companion pairs with PIN `123456` on every board. MeshCore picks a random PIN at every start on boards with a display. A PIN set with `set pin` or in the app still takes precedence. | 1.18.0 |
-| Sensors | INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by their chip ID, so an INA219 on 0x40 still works). | 1.18.0 |
-| Passwords | `get wifi.pwd` (all roles, including the companion), `get mqtt.pwd` reply `> (set)` when a password is stored and `> (not set)` when it is empty; the password itself is never sent back. `set wifi.pwd` and `set mqtt.pwd` are unchanged. Not changed, as in MeshCore: the reply to `password <new>` still echoes the new admin password, and `get guest.password` still shows the guest password. | 1.18.0 |
-| TLS network console (breaking change) | Port 5000 is TLS-only: plain `nc` or telnet no longer works. Connect with `openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`, then type the admin password as before. Each node makes its own ECDSA P-256 key and a self-signed certificate (CN = node id, O = node name) on the first boot with WiFi on; this takes about 1 s, and the node pauses for that time. `net cert renew` makes a new one. To verify the node, compare `get net.cert` (`> sha256:<hex>`) with `openssl s_client -connect <ip>:5000 </dev/null \| openssl x509 -outform DER \| sha256sum`. The console and `net ota start` refuse while the admin password is the factory default or empty: `Error: change the admin password first (password <new>)`. A failed TLS handshake counts as a failed login (3 failures lock that IP for 5 minutes). The handshake takes about 2.4 s on an ESP32-S3, and during it the node does not process LoRa packets. `openssl s_client -quiet` implies `-ign_eof`, so it keeps waiting after the node closes the session: press Enter or Ctrl+C. Repeater and room server only. | 1.18.0 |
-| `net ota` | Firmware update over the network, separate from MeshCore's `start ota` (which opens an access point). `net ota start` serves a page at `https://<ip>/update` on port 443; log in as `admin` with the admin password and upload the `<board>_mn_<role>-<version>.bin` file. The certificate is self-signed, so the browser shows a warning once per node. `start ota` is refused while WiFi is on (`Error: WiFi on - use net ota start, or set wifi.enabled 0`) or while a `net ota` session runs (`Error: net ota session active (net ota stop first)`). A failed or interrupted upload never reboots the node and keeps the old firmware. The session ends after `ota.timeout` seconds without data. Repeater and room server only; the companion has no `net ota`, `ota.*` or `net.cert`. | 1.18.0 |
-| Dropped boards | The TLS console and `net ota` add about 150 KB, which does not fit in the flash of these boards, so they get no MeshNomad repeater and no room server firmware: `Ebyte_EoRa-S3`, `Generic_E22_sx1262`, `Generic_E22_sx1268`, `LilyGo_T3S3_sx1262`, `LilyGo_T3S3_sx1276`, `LilyGo_TBeam_1W`, `Tenstar_C3_sx1262`, `Tenstar_C3_sx1268`, `ThinkNode_M2`, `ThinkNode_M5`, `Xiao_C3` (11 boards, both roles). `LilyGo_TLora_V2_1_1_6` gets no MeshNomad firmware at all (repeater 96.5 %, room server 95.4 % of its flash; no companion before either). Use the original MeshCore firmware there. `Station_G2` and `Station_G3_ESP32` are back, with a companion too: they get a 16 MB partition table (`default_16MB.csv`, as Heltec V4) that holds the larger image; their `_logging` variants are not released. | 1.18.0 |
+| Firmware per board | separate Bluetooth, USB and WiFi companion builds | one companion build with all three; one repeater and one room server build |
+| Boards | ESP32, nRF52, RP2040, STM32 | ESP32 only, see [Supported boards](#supported-boards) |
+| Path hash | 1 byte (`path.hash.mode 0`) | 2 bytes (`path.hash.mode 1`) on a fresh install |
+| Companion Bluetooth PIN | random at every start on boards with a display | `123456` everywhere; `set pin` overrides |
+| WiFi | companion only, for the app | all roles; repeater and room server apply it at once |
+| Network console | none | TLS on port 5000, admin password, repeater and room server |
+| Firmware update over WiFi | `start ota` access point | `net ota` from a browser, plus `start ota` unchanged |
+| MQTT, NTP, observer | none | all roles, off by default |
+| Password replies | `get wifi.pwd` shows the password | `(set)` or `(not set)` for `wifi.pwd` and `mqtt.pwd` |
+| Sensor commands | `sensor get`, `sensor set` | plus `sensor read`, `sensor scan` |
+| Build information | `ver` | plus `get features`, `get build` |
+| Current monitors | INA226 and INA3221 on their default addresses | also found on 0x40 |
+| Debug logging | per build | off in every release build |
 
 ## Commands
 
-Commands added by this fork, or whose default it changes. Where to type them:
+Commands added by this fork, or whose default it changes. Everything else is MeshCore's;
+see MeshCore's
+[CLI reference](https://github.com/meshcore-dev/MeshCore/blob/main/docs/cli_commands.md).
+These tables will move to `docs/cli.md` later.
 
-- **Repeater, room server:** the USB serial console, the network console (`tcp.enabled 1`),
-  the MeshNomad app's repeater / room server console, or remote admin over LoRa.
-- **Companion:** its USB port speaks the app protocol, not text, so there is no serial
-  console. Commands reach it as remote admin over LoRa from a contact you allowed remote
-  CLI, or from an app through the companion protocol's CLI command; the MeshNomad app has
-  no companion console yet.
-
-`get <key>` shows the current value, `set <key> <value>` changes and saves it.
-Every entry lists the values, the default and an example.
+Where to type them: the USB serial console of a repeater or room server, the network
+console, the MeshNomad app's node console, or remote admin over LoRa. `get <key>` shows
+the current value, `set <key> <value>` changes and saves it. Every reply starts with `> `;
+a refused value starts with `Error`.
 
 ### Path hash
 
@@ -80,263 +335,169 @@ Roles: repeater, room server, companion.
 
 | Command | What it does | Values | Default |
 |---|---|---|---|
-| `get path.hash.mode` | Shows how many bytes of each node's hash this node writes into the path of the packets it sends. | — | — |
-| `set path.hash.mode <n>` | Changes it and saves it: `0` = 1 byte, `1` = 2 bytes, `2` = 3 bytes. Longer hashes tell nodes apart more reliably; shorter ones leave room for longer paths. A node that already has a saved setting keeps it. | `0`, `1`, `2` | `1` (MeshCore: `0`) |
+| `get path.hash.mode` | How many bytes of each node's hash this node writes into the path of the packets it sends. | | |
+| `set path.hash.mode <n>` | `0` = 1 byte, `1` = 2 bytes, `2` = 3 bytes. Longer hashes tell nodes apart more reliably; shorter ones leave room for longer paths. A node with a saved setting keeps it. | `0`, `1`, `2` | `1` (MeshCore: `0`) |
 
-Example:
+### Sensors and build information
 
-```
-get path.hash.mode
-set path.hash.mode 2
-```
+Roles: `sensor read` and `sensor scan` on repeater and room server; `get features` and
+`get build` on all roles.
 
-### Sensors and build info
+| Command | What it does | Example reply |
+|---|---|---|
+| `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
+| `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls` and `ota.net`, a companion does not; `gps` appears on boards with a GPS. | `> wifi mqtt ntp observer tls ota.net` |
+| `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
 
-Roles: `sensor read` and `sensor scan` — repeater, room server; `get features`, `get build` — all roles.
+### WiFi
 
-| Command | What it does | Values | Default |
-|---|---|---|---|
-| `sensor read` | Reads every sensor now and prints one value per line, channel first (`ch2 temp=21.3C`). | — | — |
-| `sensor scan` | Lists the I2C addresses that answer on the sensor bus — a quick wiring check. Prints `no I2C devices` when nothing answers. | — | — |
-| `get features` | Lists what this firmware build contains, e.g. `wifi mqtt ntp observer gps`; `none` when nothing extra. The MeshNomad app uses it to show only commands that exist. | — | — |
-| `get build` | Shows which firmware build this is — board and role, as in the firmware file name, e.g. `heltec_v4_mn_rpt`; `unknown` when the firmware was not built with `build.sh`. The MeshNomad app uses it to offer the right file for this device. | — | — |
-
-Example:
-
-```
-sensor scan
-sensor read
-get features
-get build
-```
-
-### Network (ESP32)
-
-MeshCore itself has WiFi only in its separate companion WiFi builds: the companion joins a
-network and the app talks to it over TCP port 5000 (`wifi.ssid`, `wifi.pwd`, `wifi.clear`,
-`wifi.enabled`, `wifi.status`, `wifi.ip`; applied after a reboot). MeshNomad keeps that
-unchanged for the companion. Everything else here — WiFi for the repeater and room server
-(same command names, applied immediately), the network console, MQTT with Home Assistant
-discovery, NTP, the observer, `wifi.power` and `net …` — is this fork's own code
-(`src/helpers/net/`), not part of MeshCore.
-
-Roles: repeater, room server and companion on ESP32 boards. Everything here is off by default.
-On the companion, WiFi itself (`wifi.ssid`, `wifi.pwd`, `wifi.enabled`, …) is MeshCore's own and
-works as in MeshCore; this fork adds `wifi.power`, `mqtt.*`, `ntp.*`, `obs.*`, `net.telemetry`,
-`net status` and `net apply`. The companion has no `tcp.enabled`, `net scan`, `net ota`, `net cert`, `net.cert` or `ota.timeout`.
-On the room server the network console (`tcp.enabled`) asks for the room server's admin password.
+Roles: repeater, room server, companion. On the companion these are MeshCore's own
+commands and apply after a reboot; on the other roles they apply at once.
 
 | Command | What it does | Values | Default |
 |---|---|---|---|
-| `get/set wifi.ssid <name>` | WiFi network name. | text, max 32 chars | empty |
-| `get/set wifi.pwd <password>` | WiFi password. `get` does not show it: the reply is `> (set)` or `> (not set)`. | text, max 64 chars | empty |
-| `set wifi.clear` | Empties the WiFi name and password. | — | — |
-| `get/set wifi.enabled <0\|1>` | Turns WiFi on or off, immediately. On a repeater with `powersaving on`, WiFi keeps the board out of light sleep, which would drop the WiFi link; the room server and companion on ESP32 do not sleep, with or without WiFi. | `0`, `1` | `0` |
-| `get wifi.status`, `get wifi.ip` | Connection state, IP address. | — | — |
-| `get/set wifi.power <dBm>` | WiFi transmit power, applied immediately; `0` = chip default. | dBm | `0` |
-| `get/set tcp.enabled <0\|1>` | Console over the network: TLS on TCP port 5000, asks for the node's admin password. Connect with `openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`; plain `nc` does not work. Needs WiFi and a non-default admin password. Applied immediately. | `0`, `1` | `0` |
-| `get net.cert` | SHA-256 fingerprint of the node's certificate, `> sha256:<hex>`. Read-only. Before the first boot with WiFi on: `Error: no certificate yet, set wifi.enabled 1 first`. | — | — |
-| `net cert renew` | Makes a new key and certificate (about 1 s) and replies with the new fingerprint. Needs WiFi on (`Error: WiFi off, set wifi.enabled 1 first`). An open console session stays on the old certificate until it disconnects. | — | — |
-| `net ota start` | Starts the network firmware update: replies `> https://<ip>/update (600 s)`, or `(no limit)` when `ota.timeout` is `0`. Refuses with `Error: WiFi not connected (wl=<n>)`, `Error: change the admin password first (password <new>)`, `Error: not enough memory`, or `Error: MeshCore OTA access point active, reboot first`. Running it again while a session runs restarts the timeout. | — | — |
-| `net ota stop` | Ends the session (`> net ota stopped`; `> off` when none runs). An upload in progress is aborted, the node does not reboot. | — | — |
-| `net ota status` | `> off`, `> on https://<ip>/update left:<seconds\|-> upload:<bytes\|idle>`, `> stopping` or `> update done, restarting`. | — | — |
-| `get/set ota.timeout <s>` | How long a `net ota` session waits without data before it ends; `0` = no limit. | `0`–`86400` seconds | `600` |
-| `get/set mqtt.enabled <0\|1>` | Sends telemetry to an MQTT broker, with Home Assistant discovery. Needs WiFi and `mqtt.host`. | `0`, `1` | `0` |
-| `get/set mqtt.host`, `mqtt.port`, `mqtt.user`, `mqtt.pwd`, `mqtt.topic` | Broker address, port, login, password, base topic. `get mqtt.pwd` replies `> (set)` or `> (not set)`, never the password. A longer value is refused with `Error, max N chars` and nothing changes. | `mqtt.host` text, max 63 chars; `mqtt.port` number; `mqtt.user` text, max 32 chars; `mqtt.pwd` text, max 64 chars; `mqtt.topic` text, max 23 chars | empty, `1883`, empty, empty, `meshcore` |
-| `get/set net.telemetry <seconds>` | How often telemetry is sent. | seconds | `60` |
+| `get/set wifi.ssid <name>` | Network name. | text, max 32 chars | empty |
+| `get/set wifi.pwd <password>` | Network password; `get` replies `(set)` or `(not set)`. | text, max 64 chars | empty |
+| `set wifi.clear` | Empties the network name and password. | | |
+| `get/set wifi.enabled <0\|1>` | WiFi on or off. On a repeater with `powersaving on`, WiFi keeps the board awake; the room server and companion on ESP32 do not sleep anyway. | `0`, `1` | `0` |
+| `get wifi.status`, `get wifi.ip` | `connected` or `disconnected`; the IP address or `(not connected)`. | | |
+| `get/set wifi.power <dBm>` | Transmit power, applied at once; `0` = chip default. | `0` to `20` | `0` |
+| `net scan` | Lists networks in range with their signal, as the board sees them (takes 2 to 3 seconds). Repeater and room server. | | |
+| `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. | | |
+| `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot. | | |
+
+### Network console and certificate
+
+Roles: repeater, room server.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `get/set tcp.enabled <0\|1>` | Console over TLS on port 5000; asks for the admin password. Needs WiFi and a non-default admin password. | `0`, `1` | `0` |
+| `get net.cert` | SHA-256 fingerprint of the node's certificate, `> sha256:<hex>`. Before the first boot with WiFi on: `Error: no certificate yet, set wifi.enabled 1 first`. | | |
+| `net cert renew` | New key and certificate; replies with the new fingerprint. Needs WiFi on. An open console session stays on the old certificate until it disconnects. | | |
+
+### Firmware update over the network
+
+Roles: repeater, room server.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `net ota start` | Starts the update page: `> https://<ip>/update (600 s)`, or `(no limit)`. Refused with `Error: WiFi not connected`, `Error: change the admin password first (password <new>)`, `Error: not enough memory` or `Error: MeshCore OTA access point active, reboot first`. | | |
+| `net ota stop` | Ends the session: `> net ota stopped`, or `> off` when none runs. An upload in progress is aborted without a reboot. | | |
+| `net ota status` | `> off`, `> on https://<ip>/update left:<seconds or -> upload:<bytes or idle>`, `> stopping` or `> update done, restarting`. | | |
+| `get/set ota.timeout <s>` | How long a session waits without data before it ends; `0` = no limit. | `0` to `86400` | `600` |
+
+### MQTT settings
+
+Roles: repeater, room server, companion.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `get/set mqtt.enabled <0\|1>` | Telemetry to an MQTT broker with Home Assistant discovery. Needs WiFi and `mqtt.host`. | `0`, `1` | `0` |
+| `get/set mqtt.host <host>` | Broker address. | text, max 63 chars | empty |
+| `get/set mqtt.port <port>` | Broker port. | `1` to `65535` | `1883` |
+| `get/set mqtt.user <name>` | Broker login. | text, max 32 chars | empty |
+| `get/set mqtt.pwd <password>` | Broker password; `get` replies `(set)` or `(not set)`. | text, max 64 chars | empty |
+| `get/set mqtt.topic <topic>` | Base topic for telemetry. | text, max 23 chars | `meshcore` |
+| `get/set net.telemetry <s>` | How often telemetry is sent. | `10` and up | `60` |
+
+### NTP settings
+
+Roles: repeater, room server, companion.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
 | `get/set ntp.enabled <0\|1>` | Sets the node's clock from an NTP server. Needs WiFi. | `0`, `1` | `0` |
-| `get/set ntp.server <host>`, `ntp.interval <seconds>` | NTP server; how often the clock is set again. | `ntp.server` text, max 63 chars; `ntp.interval` seconds | `pool.ntp.org`, `90000` |
-| `get/set obs.enabled <0\|1>` | Observer: publishes every packet this node hears to MQTT, topic `<obs.topic>/<IATA>/<node key>/rx`. Needs MQTT and `obs.iata`. | `0`, `1` | `0` |
-| `get/set obs.iata <code>` | Area code used in the observer topics, e.g. `WAW`. | text, max 7 chars | empty |
+| `get/set ntp.server <host>` | NTP server. | text, max 63 chars | `pool.ntp.org` |
+| `get/set ntp.interval <s>` | How often the clock is set again. | `60` and up | `90000` |
+
+### Observer settings
+
+Roles: repeater, room server, companion.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `get/set obs.enabled <0\|1>` | Publishes every packet this node hears to `<obs.topic>/<obs.iata>/<node key>/rx`. Needs MQTT and `obs.iata`. | `0`, `1` | `0` |
+| `get/set obs.iata <code>` | Area code used in the observer topics, stored in upper case. | text, max 7 chars | empty |
 | `get/set obs.topic <topic>` | Root of the observer topics, separate from `mqtt.topic`. | text, max 23 chars | `meshcore` |
-| `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, packet counters. | — | — |
-| `net scan` | Lists WiFi networks in range (takes 2–3 s). | — | — |
-| `net apply` | Applies changed `mqtt.*`, `ntp.*`, `obs.*` settings without a reboot. | — | — |
 
-Network console login (`tcp.enabled 1`): connect with TLS to port 5000
-(`openssl s_client -quiet -connect <ip>:5000` or `ncat --ssl <ip> 5000`) and type the node's
-admin password (the one set with `password <new>`). The node's certificate is self-signed;
-check it against `get net.cert` (see [Differences from MeshCore](#differences-from-meshcore)).
-`openssl s_client -quiet` keeps waiting after the node closes the session — press Enter or Ctrl+C.
-
-- The password must be typed within 15 seconds of connecting, otherwise the connection is closed.
-- An empty admin password is never accepted, and neither is the factory default: the console answers `Error: change the admin password first (password <new>)` — set one first.
-- After 3 wrong passwords from one IP address, that address gets `Denied` for 5 minutes
-  (each new attempt restarts the 5 minutes); other addresses can still log in. The node
-  remembers up to 16 addresses. A failed TLS handshake counts as a failed login; a locked
-  address is closed before the handshake. The `net ota` page shares this lockout.
-- An idle logged-in session is closed after 120 seconds.
-
-Example — join WiFi, open the network console, send telemetry, set the clock:
+Example session on a repeater: join WiFi, open the network console, send telemetry, set
+the clock.
 
 ```
-set wifi.ssid MyNetwork
-set wifi.pwd MyPassword
+set wifi.ssid <network>
+set wifi.pwd <password>
 set wifi.enabled 1
 get wifi.ip
 set tcp.enabled 1
-set mqtt.host broker.example.org
+set mqtt.host <broker>
 set mqtt.enabled 1
 set ntp.enabled 1
 net apply
 net status
 ```
 
-## Supported boards
+## Building from source
 
-MeshNomad firmware is released only for ESP32 boards — the network features need WiFi —
-and only where a board can hold the whole feature set of a role. Boards based on nRF52,
-RP2040 or STM32 get no MeshNomad firmware, and neither does an ESP32 board for a role it
-cannot hold; use the original [MeshCore firmware](https://github.com/meshcore-dev/MeshCore/releases)
-there.
-
-The MeshNomad app works with the original MeshCore firmware too: messaging, contacts,
-channels and the administration of repeaters and room servers work as with any MeshCore
-client. What such a node does not have is everything listed in [What you get](#what-you-get);
-the app recognises a MeshCore build and does not offer those commands.
-
-MeshNomad firmware is released for these boards (✓). The board name is the start of the
-firmware file name, e.g. `Heltec_v3_mn_rpt-v1.18.0-meshnomad.1-<commit>.bin`; the vendor is
-the name used to pick boards for development builds (see [Versions](#versions)). A — means
-MeshCore releases no firmware of that role for the board, or, for the companion, the board
-cannot hold it (see the table below).
-
-<!-- >>> supported boards (generated by tool/meshnomad/gen_envs.py) -->
-| Board | Vendor | Repeater | Companion | Room server |
-|---|---|---|---|---|
-| `Heltec_ct62` | `heltec` | ✓ | ✓ | — |
-| `Heltec_E213` | `heltec` | ✓ | ✓ | ✓ |
-| `Heltec_E290` | `heltec` | ✓ | — | ✓ |
-| `heltec_rc32` | `heltec` | ✓ | ✓ | ✓ |
-| `heltec_rc32_without_display` | `heltec` | ✓ | ✓ | ✓ |
-| `heltec_tracker_v2` | `heltec` | ✓ | ✓ | ✓ |
-| `Heltec_v2` | `heltec` | ✓ | — | ✓ |
-| `Heltec_v3` | `heltec` | ✓ | ✓ | ✓ |
-| `heltec_v4` | `heltec` | ✓ | ✓ | ✓ |
-| `heltec_v4_expansionkit` | `heltec` | ✓ | — | — |
-| `heltec_v4_r8` | `heltec` | ✓ | ✓ | ✓ |
-| `heltec_v4_r8_tft` | `heltec` | ✓ | ✓ | ✓ |
-| `heltec_v4_tft` | `heltec` | ✓ | ✓ | ✓ |
-| `Heltec_Wireless_Paper` | `heltec` | ✓ | ✓ | ✓ |
-| `Heltec_Wireless_Tracker` | `heltec` | ✓ | ✓ | ✓ |
-| `Heltec_WSL3` | `heltec` | ✓ | ✓ | ✓ |
-| `LilyGo_TDeck` | `lilygo` | ✓ | ✓ | — |
-| `LilyGo_TETH_Elite_sx1262` | `lilygo` | ✓ | ✓ | ✓ |
-| `M5Stack_Unit_C6L` | `m5stack` | ✓ | — | ✓ |
-| `Meshadventurer_sx1262` | `meshadventurer` | ✓ | — | ✓ |
-| `Meshadventurer_sx1268` | `meshadventurer` | ✓ | — | ✓ |
-| `meshnology_w12` | `meshnology` | ✓ | ✓ | ✓ |
-| `RAK_3112` | `rak` | ✓ | ✓ | ✓ |
-| `Station_G2` | `bq` | ✓ | ✓ | ✓ |
-| `Station_G3_ESP32` | `bq` | ✓ | ✓ | ✓ |
-| `T_Beam_S3_Supreme_SX1262` | `lilygo` | ✓ | ✓ | ✓ |
-| `Tbeam_SX1262` | `lilygo` | ✓ | — | ✓ |
-| `Tbeam_SX1276` | `lilygo` | ✓ | — | ✓ |
-| `ThinkNode_M7` | `elecrow` | ✓ | ✓ | ✓ |
-| `Waveshare_S3_LR1121` | `waveshare` | ✓ | ✓ | ✓ |
-| `Xiao_C3` | `seeed` | — | ✓ | — |
-| `Xiao_S3` | `seeed` | ✓ | ✓ | ✓ |
-| `Xiao_S3_WIO` | `seeed` | ✓ | ✓ | ✓ |
-<!-- <<< supported boards -->
-
-ESP32 boards MeshCore releases a companion for, but MeshNomad does not:
-
-| Board | Why there is no MeshNomad companion |
-|---|---|
-| `Ebyte_EoRa-S3` | Bluetooth, USB, WiFi and the network layer do not fit in its flash |
-| `Heltec_v2` | Bluetooth, USB, WiFi and the network layer do not fit in its RAM |
-| `LilyGo_T3S3_sx1262` | do not fit in its flash |
-| `LilyGo_T3S3_sx1276` | do not fit in its flash |
-| `LilyGo_TBeam_1W` | do not fit in its flash |
-| `LilyGo_TLora_V2_1_1_6` | do not fit in its RAM |
-| `M5Stack_Unit_C6L` | do not fit in its flash |
-| `Meshadventurer_sx1262` | do not fit in its RAM |
-| `Meshadventurer_sx1268` | do not fit in its RAM |
-| `Tbeam_SX1262` | do not fit in its RAM |
-| `Tbeam_SX1276` | do not fit in its RAM |
-| `ThinkNode_M2` | do not fit in its flash |
-| `ThinkNode_M5` | do not fit in its flash |
-
-## Flashing
-
-Every firmware comes as two files:
-
-| File | Contains | Write it at | Use it to |
-|---|---|---|---|
-| `<board>_mn_<role>-<version>-merged.bin` | bootloader, partition table and firmware | `0x0` | install on a new board, move from other firmware, repair a board, or when the release notes say "Full reset required" |
-| `<board>_mn_<role>-<version>.bin` | firmware only | `0x10000` | update a board that already runs MeshNomad or MeshCore firmware for the same board; also the file for over-the-air (OTA) updates |
-
-The `-merged.bin` file also overwrites the `nvs` area, so Bluetooth pairings are lost and the
-phone has to pair again. The node's identity key and contacts live in the file-system
-partition, which neither file reaches (checked on Heltec V4; the layout is set per board).
-A full chip erase (`esptool.py erase_flash`) before flashing removes them too.
-
-With [esptool](https://github.com/espressif/esptool), using the chip of your board
-(`esp32`, `esp32s3`, `esp32c3`, `esp32c6`):
+The build is MeshCore's: [PlatformIO](https://platformio.org/), the same `platformio.ini`
+and board variants. MeshNomad firmware is the envs named `<board>_mn_<role>` with `rpt`,
+`cmp` or `rs`, generated into `variants/meshnomad/platformio.ini` by
+`tool/meshnomad/gen_envs.py`; each one extends the unchanged MeshCore env of that board.
+MeshCore's own envs for ESP32 boards stay available; the board variants without an ESP32
+build are not part of this fork.
 
 ```
-esptool.py --chip esp32s3 write_flash 0x0 heltec_v4_mn_rpt-v1.18.0-meshnomad.1-9f3c2a1-merged.bin
-esptool.py --chip esp32s3 write_flash 0x10000 heltec_v4_mn_rpt-v1.18.0-meshnomad.1-9f3c2a1.bin
+pio run -e <board>_mn_<role>
 ```
 
-Use esptool 4.8 or newer. Some boards connect through the chip's own USB, and the port
-shows up as "USB JTAG/serial debug unit" (for example Heltec V4 and T-Beam S3 Supreme).
-If an upload to such a board is interrupted, older versions cannot flash it again: the
-chip resets during the erase, and the upload fails with
-`Could not configure port: (5, 'Input/output error')`. `pio run -t upload` in this
-repository already uses esptool 4.8.1.
+A plain `pio run` gives a firmware that reports MeshCore's version and answers `get build`
+with `unknown`, so the app treats it as MeshCore firmware. To build what the releases
+contain, use `build.sh` with a version string; the two files from
+[Download and flash](#download-and-flash) land in `out/`:
 
-Each release's notes say whether a board's partition table changed since the previous
-release. If it did, that board needs the `-merged.bin` file at 0x0; otherwise the `.bin`
-file at 0x10000 updates it and keeps its settings.
+```
+FIRMWARE_VERSION=v<meshcore>-meshnomad.local bash build.sh build-firmware <board>_mn_<role>
+```
 
-`Station_G2` and `Station_G3_ESP32`: the first MeshNomad release with the 16 MB partition table
-needs a USB flash of the `-merged.bin` at 0x0. The larger `.bin` is refused over OTA. The node
-starts fresh (new identity, settings and certificate); nothing can preserve the old ones.
+Release builds have MeshCore's debug logging switched off. `pio run -t upload` uses
+esptool 4.8.1, which handles boards connected through the chip's own USB.
 
-## Versions
+## Release channels
 
-| Tag | Firmware reports | Meaning |
+| Channel | Tag | Firmware reports |
 |---|---|---|
-| `rpt-v1.18.0-meshnomad.1` | `v1.18.0-meshnomad.1-<commit>` | first MeshNomad repeater release on MeshCore 1.18.0 |
-| `cmp-v…`, `rs-v…` | same scheme | companion, room server |
-| `dev-rpt-57`, `dev-cmp-57`, `dev-rs-57` (prerelease) | `v1.18.0-meshnomad.dev.57-<commit>` | development build no. 57 from `dev-meshnomad`, may be unstable; a higher number is a newer build; the newest 20 per role are kept. Never compare it with a release number. |
+| Release | `rpt-v<meshcore>-meshnomad.<n>`, the same with `cmp-` and `rs-` | `v<meshcore>-meshnomad.<n>-<commit>` |
+| Development (prerelease) | `dev-rpt-<build>`, `dev-cmp-<build>`, `dev-rs-<build>` | `v<meshcore>-meshnomad.dev.<build>-<commit>` |
 
-Development builds are started by hand: **Actions → Build Dev Firmware → Run workflow**
-on `dev-meshnomad`, or `tool/meshnomad/dev_build.py` in a terminal. Boards are picked
-from the two lists or as paths `<vendor>/<board>/<role>` — `heltec/heltec_v4/rpt`,
-`heltec/heltec_v4` (all roles), `heltec`, `heltec/*/rpt`, `*/*/cmp`, several separated
-by commas. Vendor and board names are the Vendor and Board columns of
-[Supported boards](#supported-boards), in lower case.
+`<meshcore>` is the MeshCore version the release is built on; `<n>` counts MeshNomad
+releases on that MeshCore version and starts again at 1 on the next one. For example,
+`rpt-v1.18.0-meshnomad.1` is the first MeshNomad repeater release on MeshCore 1.18.0.
 
-## Building
+Development builds come from the `dev-meshnomad` branch, one prerelease per role and run;
+a higher build number is a newer build, and the newest 20 per role are kept. They may be
+unstable and their build number says nothing about release numbers. They are started by
+hand from the Actions tab (Build Dev Firmware) or with `tool/meshnomad/dev_build.py`,
+which picks boards as `<vendor>/<board>/<role>` paths such as `heltec/heltec_v4/rpt`,
+`heltec`, `heltec/*/rpt` or `*/*/cmp`, with vendor and board names from
+[Supported boards](#supported-boards) in lower case.
 
-Same as MeshCore — PlatformIO, see the [MeshCore documentation](https://github.com/meshcore-dev/MeshCore/tree/main/docs).
-MeshNomad builds are the envs named `<board>_mn_<role>` (`rpt`, `cmp`, `rs`), e.g.
-`pio run -e Heltec_v3_mn_rpt`. They are generated into `variants/meshnomad/platformio.ini`
-by `tool/meshnomad/gen_envs.py`. MeshCore's own envs for ESP32 boards stay available
-unchanged; the board variants without ESP32 are not part of this fork.
+## Development
 
-A plain `pio run` gives firmware that reports MeshCore's version (`v1.18.0`) and
-`get build` → `unknown`, so the MeshNomad app treats it as MeshCore firmware. To build what
-the releases contain, use `build.sh`; the two files of [Flashing](#flashing) land in `out/`:
+- `main` mirrors MeshCore's `main` and never carries fork changes. `main-meshnomad` is the
+  default branch and the only one releases are tagged from; it changes only through a
+  pull request from `dev-meshnomad`, where all work and every MeshCore merge land first.
+- After a MeshCore merge, run `tool/meshnomad/drop_unsupported.py` (removes the board
+  variants that have no ESP32 build) and then `tool/meshnomad/gen_envs.py` (release envs,
+  the boards table above and the dev-build targets). The pull request check fails if
+  either step was missed.
+- Every MeshNomad change inside a MeshCore file, and every MeshCore file this fork
+  deletes, is listed in [`docs/UPSTREAM-HUNKS.md`](docs/UPSTREAM-HUNKS.md).
+- MeshCore's protocol and CLI documentation is not copied here; read it in
+  [MeshCore's `docs/`](https://github.com/meshcore-dev/MeshCore/tree/main/docs).
 
-```
-FIRMWARE_VERSION=v1.18.0-meshnomad.local bash build.sh build-firmware Heltec_v3_mn_rpt
-```
+## Licence and credits
 
-## Staying in sync
-
-- `main` mirrors MeshCore's `main` and never carries fork changes.
-- `main-meshnomad` is the fork's default branch and the only one releases are
-  tagged from. It changes only through a pull request from `dev-meshnomad`, which
-  is then fast-forwarded, so a release is built from exactly the commit the checks
-  passed on.
-- `dev-meshnomad` is where work happens: every change and every MeshCore release
-  is merged there first, also through a pull request (from a `feat/`, `fix/` or
-  `chore/` branch) that is fast-forwarded once its checks pass.
-- After each MeshCore merge, run `tool/meshnomad/drop_unsupported.py`: it removes
-  MeshCore's board variants and board files that have no ESP32 build (this also
-  settles the merge conflicts on those files). Then run `tool/meshnomad/gen_envs.py`
-  for the release envs. The pull request check fails if either step was missed.
-- On a merge conflict in this `README.md`, keep this file.
+MIT, unchanged from MeshCore; see [`license.txt`](license.txt). MeshCore is the work of
+Scott Powell and the MeshCore contributors; all MeshCore code keeps its original
+copyright. The MeshNomad additions are released under the same licence.
