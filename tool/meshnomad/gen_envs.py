@@ -231,7 +231,7 @@ def generate(config: list) -> tuple[str, dict[str, set[str]]]:
 def render_table(released: dict[str, set[str]]) -> str:
     lines = [
         README_BEGIN,
-        "| Board | Vendor | Repeater | Companion | Room server |",
+        "| Board | Vendor | RPT | CMP | RS |",
         "|---|---|---|---|---|",
     ]
     for board in sorted(released, key=str.lower):
