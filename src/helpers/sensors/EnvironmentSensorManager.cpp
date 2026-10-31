@@ -610,6 +610,12 @@ static const SensorDef SENSOR_TABLE[] = {
 #if TELEM_INA3221_ADDRESS != 0x40
   { 0x40,                  "INA3221",      init_ina3221,  query_ina3221  },  // MeshNomad: alternate address, ID-checked
 #endif
+#if TELEM_INA3221_ADDRESS != 0x41
+  { 0x41,                  "INA3221",      init_ina3221,  query_ina3221  },  // MeshNomad: A0=VS, before INA260 (same address)
+#endif
+#if TELEM_INA3221_ADDRESS != 0x43
+  { 0x43,                  "INA3221",      init_ina3221,  query_ina3221  },  // MeshNomad: A0=SCL
+#endif
 #endif
 #if ENV_INCLUDE_INA226 && defined(MN_INA226_ALT)
   { 0x40,                  "INA226",       init_ina226_alt, query_ina226_alt },  // MeshNomad: before INA219, die-ID checked

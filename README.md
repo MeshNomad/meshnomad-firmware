@@ -89,7 +89,8 @@ One firmware per board and role. Everything below is off until you turn it on.
   which firmware file fits the device.
 - 2-byte path hash by default on a fresh install (`set path.hash.mode` changes it).
 - INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by
-  their chip ID, so an INA219 on 0x40 still works).
+  their chip ID, so an INA219 on 0x40 still works); INA3221 also on 0x41 and 0x43, so
+  any A0 strapping works.
 
 ## Supported boards
 
@@ -331,7 +332,7 @@ access point. It is refused while WiFi is on or while a `net ota` session runs.
 | Password replies | `get wifi.pwd` shows the password | `(set)` or `(not set)` for `wifi.pwd` and `mqtt.pwd` |
 | Sensor commands | `sensor get`, `sensor set` | plus `sensor read`, `sensor scan` |
 | Build information | `ver` | plus `get features`, `get build` |
-| Current monitors | INA226 and INA3221 on their default addresses | also found on 0x40 |
+| Current monitors | INA226 and INA3221 on their default addresses | also found on 0x40; INA3221 on any address 0x40 to 0x43 |
 | Debug logging | per build | off in every release build |
 
 ## Commands
