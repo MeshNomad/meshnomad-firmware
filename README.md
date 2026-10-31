@@ -72,7 +72,8 @@ One firmware per board and role. Everything below is off until you turn it on.
 
 **Companion** (`<board>_mn_cmp`)
 
-- Bluetooth, USB and WiFi in one firmware; MeshCore ships these as separate builds.
+- Bluetooth, USB and WiFi in one firmware on every board; MeshCore ships separate
+  builds (on a few boards its Bluetooth build also has WiFi, never USB).
 - Pairs with PIN `123456` on every board. A PIN set with `set pin` or in the app
   still takes precedence.
 - WiFi settings and the app connection over WiFi work exactly as in MeshCore: the
@@ -321,11 +322,11 @@ access point. It is refused while WiFi is on or while a `net ota` session runs.
 
 | Area | MeshCore | MeshNomad |
 |---|---|---|
-| Firmware per board | separate Bluetooth, USB and WiFi companion builds | one companion build with all three; one repeater and one room server build |
+| Companion firmware | separate Bluetooth, USB and WiFi builds; on 9 boards the Bluetooth build also has WiFi | one build with Bluetooth, USB and WiFi on every board |
 | Boards | ESP32, nRF52, RP2040, STM32 | ESP32 only, see [Supported boards](#supported-boards) |
 | Path hash | 1 byte (`path.hash.mode 0`) | 2 bytes (`path.hash.mode 1`) on a fresh install |
 | Companion Bluetooth PIN | random at every start on boards with a display | `123456` everywhere; `set pin` overrides |
-| WiFi | companion only, for the app | all roles; repeater and room server apply it at once |
+| WiFi | companion: app connection; repeater and room server: only the `start ota` access point | all roles join your network; repeater and room server apply it at once |
 | Network console | none | TLS on port 5000, admin password, repeater and room server |
 | Firmware update over WiFi | `start ota` access point | `net ota` from a browser, plus `start ota` unchanged |
 | MQTT, NTP, observer | none | all roles, off by default |
