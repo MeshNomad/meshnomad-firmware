@@ -302,6 +302,9 @@ access point. It is refused while WiFi is on or while a `net ota` session runs.
 
 ## Security notes
 
+To report a vulnerability or to verify a downloaded firmware file, see
+[SECURITY.md](SECURITY.md).
+
 - The network console speaks TLS only; there is no plain-text mode. Each node generates
   its own ECDSA P-256 key and a self-signed certificate (CN = node id, O = node name) on
   the first boot with WiFi on. `get net.cert` shows the SHA-256 fingerprint for a manual
