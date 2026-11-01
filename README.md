@@ -379,11 +379,12 @@ commands and apply after a reboot; on the other roles they apply at once.
 | `get/set wifi.ssid <name>` | Network name. | text, max 32 chars | empty |
 | `get/set wifi.pwd <password>` | Network password; `get` replies `(set)` or `(not set)`. | text, max 64 chars | empty |
 | `set wifi.clear` | Empties the network name and password. | | |
-| `get/set wifi.enabled <0\|1>` | WiFi on or off. On a repeater with `powersaving on`, WiFi keeps the board awake; the room server and companion on ESP32 do not sleep anyway. | `0`, `1` | `0` |
+| `get/set wifi.enabled <0\|1>` | WiFi on or off. On a repeater with `powersaving on`, WiFi keeps the board awake; the room server and companion on ESP32 do not sleep anyway. Repeater and room server: after a boot or a lost link the node makes 3 connect attempts (radio off 15 s, then 30 s in between); if all fail, the WiFi radio stays off until `net wifi retry`, `net apply`, `set wifi.ssid`, `set wifi.pwd`, `set wifi.enabled 1` or a reboot. | `0`, `1` | `0` |
 | `get wifi.status`, `get wifi.ip` | `connected` or `disconnected`; the IP address or `(not connected)`. | | |
 | `get/set wifi.power <dBm>` | Transmit power, applied at once; `0` = chip default. | `0` to `20` | `0` |
-| `net scan` | Lists networks in range with their signal, as the board sees them (takes 2 to 3 seconds). Repeater and room server. | | |
-| `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. | | |
+| `net scan` | Lists networks in range with their signal, as the board sees them (takes 2 to 3 seconds). Repeater and room server. A scan drops the WiFi link; during a connect attempt it starts the attempts again at 1/3, and within 30 s of connecting it uses up one attempt. | | |
+| `net wifi retry` | Starts the 3 connect attempts again, for example after the attempts failed. Repeater and room server. | | |
+| `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. WiFi on the repeater and room server: `off`, `no ssid`, `try <n>/3(wl=<code>)`, `wait <n>/3` (radio off between attempts), `failed` (radio off, see `net wifi retry`), `connected`. | | |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot. | | |
 
 ### Network console and certificate
@@ -393,7 +394,7 @@ Roles: repeater, room server.
 | Command | What it does | Values | Default |
 |---|---|---|---|
 | `get/set tcp.enabled <0\|1>` | Console over TLS on port 5000; asks for the admin password. Needs WiFi and a non-default admin password. | `0`, `1` | `0` |
-| `get net.cert` | SHA-256 fingerprint of the node's certificate, `> sha256:<hex>`. Before the first boot with WiFi on: `Error: no certificate yet, set wifi.enabled 1 first`. | | |
+| `get net.cert` | SHA-256 fingerprint of the node's certificate, `> sha256:<hex>`. Before the WiFi radio has been on once: `Error: no certificate yet, ...` with a hint (`set wifi.enabled 1 first`, `set wifi.ssid first` or `net wifi retry`). | | |
 | `net cert renew` | New key and certificate; replies with the new fingerprint. Needs WiFi on. An open console session stays on the old certificate until it disconnects. | | |
 
 ### Firmware update over the network

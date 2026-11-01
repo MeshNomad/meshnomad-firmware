@@ -87,6 +87,10 @@ void NetServices::begin(const char* node_id, CmdFn cmd, TelemFn telem, SetTimeFn
   _console_password = console_password;
   _inhibit_sleep = inhibit_sleep;
   g_net = this;
+#ifndef NET_WIFI_EXTERNAL
+  WiFi.persistent(false);      // credentials live in /netcfg; begin() must not write NVS on every attempt
+  WiFi.onEvent(onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+#endif
   _cfg.load();
   applyWifiState();
 }
@@ -110,12 +114,7 @@ void NetServices::loop() {
     if (_ota.running()) _ota.stop();   // WiFi dropped: end the session, no reboot
     ntpStop();                 // re-armed on reconnect
     if (_cli_srv.connected()) cliReset();
-    unsigned long now = millis();
-    if (_cfg.wifi_ssid[0] && now - _last_wifi_retry > 10000UL) {
-      _last_wifi_retry = now;
-      WiFi.begin(_cfg.wifi_ssid, _cfg.wifi_pwd);
-    }
-    return;
+    return;                    // retries: applyWifiState() / WifiRetry
   }
   cliLoop();
 #else
@@ -142,28 +141,89 @@ void NetServices::stopAll() {
   _ota.stop();                 // aborts an upload (no reboot); the server ends in _ota.loop()
   cliReset();
   _cli_srv.end();              // listener closed; the key/cert stay loaded
-  if (_wifi_started) {
+  // STA only: a late event-task begin() can leave it on with _wifi_started false;
+  // the upstream 'start ota' access point is never touched here.
+  if (_wifi_started || WiFi.getMode() == WIFI_MODE_STA) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     _wifi_started = false;
   }
+  _wifi_retry.reset();         // 'net apply' starts again at attempt 1
   updateSleepInhibit();        // stays inhibited until the ota server is fully off
 #endif
 }
 
+#ifndef NET_WIFI_EXTERNAL
+#ifdef WITH_ESPNOW_BRIDGE
+  #error "NetServices owns the WiFi STA mode (turns it off between attempts); not with the ESP-NOW bridge"
+#endif
+
+// WiFi event task. Our own disconnect() reports ASSOC_LEAVE and is not counted.
+void NetServices::onStaDisconnected(arduino_event_id_t, arduino_event_info_t info) {
+  switch (info.wifi_sta_disconnected.reason) {
+    case WIFI_REASON_NO_AP_FOUND:
+    case WIFI_REASON_AUTH_FAIL:
+    case WIFI_REASON_ASSOC_FAIL:
+    case WIFI_REASON_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_CONNECTION_FAIL:
+      if (g_net) {
+        g_net->_wifi_failed_at = millis();     // time first, then the flag that publishes it
+        g_net->_wifi_scan_failed = true;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void NetServices::wifiBegin() {
+  _wifi_scan_failed = false;   // WifiRetry also ignores reports from the attempt's first second
+  WiFi.begin(_cfg.wifi_ssid, _cfg.wifi_pwd);
+}
+
+void NetServices::radioOn() {
+  setSleepInhibit(true);       // light sleep would drop the WiFi link
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);   // WifiRetry owns retries: the core's own loop scans non-stop
+  wifiBegin();
+  applyWifiPower();
+  _wifi_started = true;
+  ensureTls();                 // after WIFI_STA: the radio feeds the hardware RNG
+}
+
+void NetServices::radioOff() {
+  ntpStop();
+  cliReset();
+  _cli_srv.end();              // re-bound by applyTcpState() on the next attempt
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  _wifi_started = false;
+  updateSleepInhibit();
+}
+#endif
+
 void NetServices::applyWifiState() {
 #ifndef NET_WIFI_EXTERNAL
-  if (_cfg.wifi_enabled && !_wifi_started) {
-    setSleepInhibit(true);     // light sleep would drop the WiFi link
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    if (_cfg.wifi_ssid[0]) WiFi.begin(_cfg.wifi_ssid, _cfg.wifi_pwd);
-    applyWifiPower();
-    _wifi_started = true;
-    _last_wifi_retry = millis();
-    ensureTls();               // after WIFI_STA: the radio feeds the hardware RNG
-  } else if (!_cfg.wifi_enabled && _wifi_started) {
-    stopAll();
+  bool want = _cfg.wifi_enabled && _cfg.wifi_ssid[0];   // no SSID: no radio
+  bool failed = _wifi_scan_failed;
+  switch (_wifi_retry.step(millis(), want, WiFi.status() == WL_CONNECTED, _ota.active(),
+                           failed, _wifi_failed_at)) {
+    case WifiRetry::RADIO_ON:  radioOn(); break;
+    case WifiRetry::REBEGIN:                              // the core's own reconnect pattern
+      WiFi.disconnect();
+      wifiBegin();
+      break;
+    case WifiRetry::RADIO_OFF: if (want) radioOff(); else stopAll(); break;
+    case WifiRetry::NONE:      break;
+  }
+  // A late first_connect begin() from the event task can turn STA back on. In IDLE only a
+  // plain STA mode is ours: the upstream 'start ota' access point (AP mode) stays.
+  WifiRetry::Phase ph = _wifi_retry.phase();
+  wifi_mode_t m = WiFi.getMode();
+  if (((ph == WifiRetry::OFF_WAIT || ph == WifiRetry::FAILED) && m != WIFI_MODE_NULL) ||
+      (ph == WifiRetry::IDLE && m == WIFI_MODE_STA)) {
+    WiFi.mode(WIFI_OFF);
   }
 #else
   applyWifiPower();
@@ -573,7 +633,14 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     char wifi_st[24];
     bool up = isWifiConnected();
 #ifndef NET_WIFI_EXTERNAL
+    WifiRetry::Phase ph = _wifi_retry.phase();
+    unsigned att = _wifi_retry.attempt();
     if (!_cfg.wifi_enabled) strcpy(wifi_st, "off");
+    else if (!_cfg.wifi_ssid[0]) strcpy(wifi_st, "no ssid");
+    else if (ph == WifiRetry::FAILED) strcpy(wifi_st, "failed");
+    else if (ph == WifiRetry::OFF_WAIT) snprintf(wifi_st, sizeof(wifi_st), "wait %u/%u", att, (unsigned)WifiRetry::MAX_ATTEMPTS);
+    else if (ph == WifiRetry::ATTEMPT && !up)
+      snprintf(wifi_st, sizeof(wifi_st), "try %u/%u(wl=%d)", att, (unsigned)WifiRetry::MAX_ATTEMPTS, (int)WiFi.status());
     else
 #endif
     if (up) strcpy(wifi_st, "connected");
@@ -605,8 +672,17 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     }
     WiFi.scanDelete();
     if (!was_started) WiFi.mode(WIFI_OFF);
-    else if (_cfg.wifi_ssid[0]) WiFi.begin(_cfg.wifi_ssid, _cfg.wifi_pwd);
+    else _wifi_retry.retry();             // attempt 1/3 again; while up, the drop takes the normal path
     if (ota_stopped) strlcat(reply, OTA_STOPPED_SUFFIX, n);
+    return true;
+  }
+  if (!strcmp(command, "net wifi retry")) {
+    if (!_cfg.wifi_enabled) snprintf(reply, n, "Error: WiFi off, set wifi.enabled 1 first");
+    else if (!_cfg.wifi_ssid[0]) snprintf(reply, n, "Error: wifi.ssid not set");
+    else {
+      _wifi_retry.retry();                // runs on the next loop() pass
+      snprintf(reply, n, "> wifi retry");
+    }
     return true;
   }
   if (!strcmp(command, "set wifi.clear")) {
@@ -620,7 +696,9 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     // Needs the radio on for the hardware RNG. Blocks for the key generation; an open
     // console session keeps running on the old certificate until it disconnects.
     if (!_wifi_started) {
-      snprintf(reply, n, "Error: WiFi off, set wifi.enabled 1 first");
+      if (!_cfg.wifi_enabled) snprintf(reply, n, "Error: WiFi off, set wifi.enabled 1 first");
+      else if (!_cfg.wifi_ssid[0]) snprintf(reply, n, "Error: wifi.ssid not set");
+      else snprintf(reply, n, "Error: WiFi radio off (net wifi retry)");
       return true;
     }
     if (!NetTls::renew(_node_id, _node_name ? _node_name : "")) {
@@ -662,7 +740,9 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     else if (!strcmp(key, "net.cert")) {    // SHA-256 of the certificate DER, never the key
       char fp[80];
       if (NetTls::fingerprint(fp, sizeof(fp))) snprintf(reply, n, "> %s", fp);
-      else snprintf(reply, n, "Error: no certificate yet, set wifi.enabled 1 first");
+      else if (!_cfg.wifi_enabled) snprintf(reply, n, "Error: no certificate yet, set wifi.enabled 1 first");
+      else if (!_cfg.wifi_ssid[0]) snprintf(reply, n, "Error: no certificate yet, set wifi.ssid first");
+      else snprintf(reply, n, "Error: no certificate yet (net wifi retry)");
     }
     else if (!strcmp(key, "ota.timeout"))   snprintf(reply, n, "> %d", _cfg.ota_timeout_s);
 #endif
@@ -734,6 +814,10 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     _cfg.assign(key, val);
     _cfg.save();
     if (!strcmp(key, "wifi.power") && _wifi_started) applyWifiPower();
+#ifndef NET_WIFI_EXTERNAL
+    if (!strcmp(key, "wifi.ssid") || !strcmp(key, "wifi.pwd") ||
+        (!strcmp(key, "wifi.enabled") && num == 1)) _wifi_retry.retry();   // out of FAILED / wait
+#endif
 
     if (!strcmp(key, "wifi.pwd") || !strcmp(key, "mqtt.pwd")) {
       snprintf(reply, n, "> %s updated", key);

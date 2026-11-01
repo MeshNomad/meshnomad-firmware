@@ -21,6 +21,7 @@
 #ifndef NET_WIFI_EXTERNAL
   #include "NetTls.h"        // TLS console; empty in the companion build
   #include "NetOta.h"        // 'net ota' over HTTPS; empty in the companion build
+  #include "WifiRetry.h"     // 3 bounded attempts, then the radio stays off
 #endif
 
 // Snapshot of node telemetry, filled by the role via a callback. Optional fields
@@ -110,8 +111,16 @@ private:
   bool _apply_pending = false;  // 'net apply' requested; runs at the top of loop()
 
   // ---- WiFi ----
-  bool _wifi_started = false;
-  unsigned long _last_wifi_retry = 0;
+  bool _wifi_started = false;   // STA radio on (attempt running or connected)
+#ifndef NET_WIFI_EXTERNAL
+  WifiRetry _wifi_retry;
+  volatile bool     _wifi_scan_failed = false;   // set by the WiFi event task, cleared per attempt
+  volatile uint32_t _wifi_failed_at = 0;         // millis() of that report
+  static void onStaDisconnected(arduino_event_id_t event, arduino_event_info_t info);
+  void wifiBegin();             // clears _wifi_scan_failed, then WiFi.begin()
+  void radioOn();               // STA on, one connect attempt, sleep inhibited
+  void radioOff();              // STA off between/after attempts, sleep allowed
+#endif
   void applyWifiState();        // bring WiFi up or fully off to match the config
   void applyWifiPower();
   void stopAll();               // MQTT offline + console closed + WiFi off
@@ -160,7 +169,7 @@ private:
   NetOta _ota;
   bool   _sleep_inhibited = false;    // last value passed to _inhibit_sleep
   void setSleepInhibit(bool on);
-  void updateSleepInhibit();          // inhibit = _wifi_started || ota session active
+  void updateSleepInhibit();          // inhibit = STA radio on || ota session active
   bool otaStopForNet();               // stop a running session; true if one was running
   void otaCli(const char* arg, char* reply, size_t n);
   // NetOtaHooks trampolines to the single instance; run in the httpd task.
