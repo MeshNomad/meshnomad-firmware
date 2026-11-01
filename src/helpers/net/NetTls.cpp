@@ -286,8 +286,14 @@ bool fingerprint(char* out, size_t n) {
     if (n) out[0] = 0;
     return false;
   }
-  int len = snprintf(out, n, "sha256:");
-  for (int i = 0; i < 32; i++) len += snprintf(out + len, n - len, "%02x", _fp[i]);
+  // Fixed-size output written by index: "sha256:" + 64 hex digits + NUL fits the check above.
+  static const char hex[] = "0123456789abcdef";
+  memcpy(out, "sha256:", 7);
+  for (int i = 0; i < 32; i++) {
+    out[7 + 2 * i] = hex[_fp[i] >> 4];
+    out[8 + 2 * i] = hex[_fp[i] & 0x0f];
+  }
+  out[7 + 64] = 0;
   return true;
 }
 
