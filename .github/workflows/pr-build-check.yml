@@ -16,6 +16,9 @@ on:
       - '.github/actions/**'
       - 'tool/meshnomad/**'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,19 +39,25 @@ jobs:
 
     steps:
       - name: Clone Repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Setup Build Environment
         uses: ./.github/actions/setup-build-environment
 
       - name: Build ${{ matrix.environment }}
-        run: pio run -e ${{ matrix.environment }}
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: pio run -e "$ENVIRONMENT"
 
   generated-envs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone Repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Setup Build Environment
         uses: ./.github/actions/setup-build-environment

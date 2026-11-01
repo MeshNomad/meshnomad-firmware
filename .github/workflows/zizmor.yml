@@ -1,0 +1,28 @@
+name: Workflow Security Check
+
+# Static analysis of the GitHub Actions setup with zizmor (https://docs.zizmor.sh):
+# unpinned actions, template injection, broad token permissions, persisted credentials.
+# A finding fails the check; justified exceptions carry an inline `# zizmor: ignore[...]`.
+
+on:
+  pull_request:
+    branches: [dev-meshnomad, main-meshnomad]
+    paths:
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone Repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        # --offline: no GitHub API calls, so the job needs no token.
+        run: pipx run zizmor==1.31.1 --offline --format=github .github/

@@ -1,0 +1,10 @@
+# zizmor configuration (used by .github/workflows/zizmor.yml)
+rules:
+  # Suggests the newer `$/...` form for local actions and reusable workflows; `./...` is
+  # equivalent for this repository and keeps the workflows readable for MeshCore upstream.
+  self-repository:
+    disable: true
+  # Suggests replacing softprops/action-gh-release with the preinstalled gh CLI; the action
+  # is pinned to a commit and kept until the release step is rewritten.
+  superfluous-actions:
+    disable: true

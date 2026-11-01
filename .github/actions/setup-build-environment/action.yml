@@ -4,7 +4,7 @@ runs:
   steps:
 
     - name: Init Cache
-      uses: actions/cache@v5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: |
           ~/.cache/pip
@@ -12,7 +12,7 @@ runs:
         key: ${{ runner.os }}-pio
 
     - name: Install Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: '3.13'
 
@@ -24,9 +24,11 @@ runs:
     # Tag "rpt-v1.18.0-meshnomad.3": GIT_TAG_VERSION = "v1.18.0-meshnomad.3" — used in the
     # release title, compiled into the firmware and in the file names. Branch builds get
     # "<MeshCore version>-meshnomad.dev", e.g. "v1.18.0-meshnomad.dev"; build.sh appends the commit.
+    # The tag name reaches $GITHUB_ENV only after the version check below, so a crafted tag
+    # cannot inject other variables.
     - name: Extract Version from Git Tag
       shell: bash
-      run: |
+      run: | # zizmor: ignore[github-env] value is checked against a strict pattern first
         if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
           GIT_TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION_STRING="v${GIT_TAG_NAME#*-v}"
@@ -35,4 +37,8 @@ runs:
             examples/simple_repeater/MyMesh.h | head -n 1)
           VERSION_STRING="${BASE:-v0.0.0}-meshnomad.dev"
         fi
-        echo "GIT_TAG_VERSION=${VERSION_STRING}" >> $GITHUB_ENV
+        if [[ ! "${VERSION_STRING}" =~ ^v[0-9]+(\.[0-9]+)*-meshnomad\.[0-9a-z.]+$ ]]; then
+          echo "::error::Unexpected firmware version '${VERSION_STRING}' from ${GITHUB_REF}"
+          exit 1
+        fi
+        echo "GIT_TAG_VERSION=${VERSION_STRING}" >> "$GITHUB_ENV"
