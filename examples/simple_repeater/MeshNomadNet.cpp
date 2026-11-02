@@ -69,6 +69,9 @@ void meshnomad_net_setup() {
   // Observer origin = the node name, re-read at every publish (a rename applies at once).
   net.setObserverInfo(obs_id, the_mesh.getNodePrefs()->node_name,
                       board.getManufacturerName(), FIRMWARE_VERSION);
+  net.setSigner([](uint8_t sig[64], const uint8_t* msg, int len) {   // uplink login tokens
+    the_mesh.self_id.sign(sig, msg, len);
+  });
   // The node name goes into the TLS certificate (O=); the node id is its CN.
   net.begin(node_id, net_cmd, net_telem, net_set_time, net_console_password, net_inhibit_sleep,
             ADMIN_PASSWORD, the_mesh.getNodePrefs()->node_name);

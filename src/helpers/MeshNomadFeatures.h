@@ -28,6 +28,7 @@ inline void meshnomadFeatures(char* out, size_t n) {
 #if defined(ESP32) && defined(WITH_NET_SERVICES) && !defined(NET_WIFI_EXTERNAL)
   add("tls");    // network console over TLS (NetTls); not in the companion
   add("ota.net");  // 'net ota': firmware update over HTTPS (NetOta); not in the companion
+  add("obsup");    // observer uplinks obs1..obs3 to external brokers (NetUplink); not in the companion
 #endif
 #if defined(WITH_BRIDGE) || defined(WITH_RS232_BRIDGE) || defined(WITH_ESPNOW_BRIDGE)
   add("bridge");

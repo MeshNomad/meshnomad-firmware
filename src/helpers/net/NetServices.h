@@ -18,6 +18,7 @@
 #include <PubSubClient.h>
 #include <math.h>            // NAN / isnan for optional sensor fields
 #include "NetConfig.h"
+#include "NetUplink.h"       // observer ring + uplinks obs1..obs3 (uplinks: not in the companion)
 #ifndef NET_WIFI_EXTERNAL
   #include "NetTls.h"        // TLS console; empty in the companion build
   #include "NetOta.h"        // 'net ota' over HTTPS; empty in the companion build
@@ -78,6 +79,11 @@ public:
   // Observer identity: observer_id = full public key hex, origin = node name.
   void setObserverInfo(const char* observer_id, const char* origin,
                        const char* model, const char* fw_version);
+
+#ifndef NET_WIFI_EXTERNAL
+  // Signs uplink login tokens with the node identity (the private key never leaves it).
+  void setSigner(UplinkSignFn sign) { _sign = sign; }
+#endif
 
   // Called from the radio path — never blocks. Copies the packet into a
   // drop-oldest ring; publishing happens later in loop().
@@ -194,17 +200,12 @@ private:
   void topicStatus(char* out, size_t n);
 
   // ---- Observer ----
-  // Max raw packet = 255 bytes; 8 slots ≈ 2.1 KB RAM.
-  struct ObsPacket {
-    uint8_t len;
-    float   snr;
-    float   rssi;
-    uint8_t raw[255];
-  };
-  static const int OBS_QUEUE_SLOTS = 8;
-  ObsPacket _obs_q[OBS_QUEUE_SLOTS];
-  int      _obs_head = 0;       // oldest entry
-  int      _obs_count = 0;
+  // One ring for every consumer (local broker + uplinks), each with its own read cursor:
+  // a slow consumer loses its oldest packets alone. slot = seq % OBS_RING_SLOTS.
+  ObsPacket _obs_q[OBS_RING_SLOTS];
+  uint32_t _obs_oldest = 0;     // oldest sequence still in the ring
+  uint32_t _obs_next = 0;       // next sequence to write
+  uint32_t _obs_local = 0;      // local broker cursor
   uint32_t _obs_dropped = 0;
   uint32_t _obs_published = 0;
   char _obs_id[65]     = {0};
@@ -215,4 +216,19 @@ private:
   char _obs_fw[33]     = {0};
   void observerDrain();
   void publishObsStatus(const Telemetry& t);
+  bool uplinksOn() const;
+
+#ifndef NET_WIFI_EXTERNAL
+  // ---- Observer uplinks obs1..obs3 (NetUplink) ----
+  NetUplink _up[OBS_UPLINKS];
+  int  _handshake_owner = -1;   // one TLS handshake at a time
+  UplinkSignFn _sign = nullptr;
+  char _obs_pub[65] = {0};      // public key, uppercase
+  unsigned long _last_up_status = 0;
+  void uplinksLoop(bool wifi_up);
+  void uplinksStop();
+  int  tlsUplinksOn(int except) const;
+  bool uplinkCliGet(const char* key, char* reply, size_t n);
+  bool uplinkCliSet(int u, const char* field, const char* val, char* reply, size_t n);
+#endif
 };

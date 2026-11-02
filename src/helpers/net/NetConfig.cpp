@@ -5,7 +5,24 @@
 
 #define NETCFG_FILE "/netcfg"
 
+int NetConfig::uplinkKey(const char* k, const char** field) {
+  if (strncmp(k, "obs", 3) != 0 || k[3] < '1' || k[3] > '0' + OBS_UPLINKS || k[4] != '.') return -1;
+  *field = k + 5;
+  return k[3] - '1';
+}
+
 int NetConfig::maxLen(const char* k) {
+  const char* f;
+  if (uplinkKey(k, &f) >= 0) {
+    if (!strcmp(f, "host"))  return sizeof(UplinkConfig::host) - 1;
+    if (!strcmp(f, "user"))  return sizeof(UplinkConfig::user) - 1;
+    if (!strcmp(f, "pwd"))   return sizeof(UplinkConfig::pwd) - 1;
+    if (!strcmp(f, "aud"))   return sizeof(UplinkConfig::aud) - 1;
+    if (!strcmp(f, "topic")) return sizeof(UplinkConfig::topic) - 1;
+    return -1;
+  }
+  if (!strcmp(k, "obs.owner"))   return sizeof(NetConfig::obs_owner) - 1;
+  if (!strcmp(k, "obs.email"))   return sizeof(NetConfig::obs_email) - 1;
   if (!strcmp(k, "wifi.ssid"))   return sizeof(NetConfig::wifi_ssid) - 1;
   if (!strcmp(k, "wifi.pwd"))    return sizeof(NetConfig::wifi_pwd) - 1;
   if (!strcmp(k, "mqtt.host"))   return sizeof(NetConfig::mqtt_host) - 1;
@@ -19,7 +36,24 @@ int NetConfig::maxLen(const char* k) {
 }
 
 bool NetConfig::assign(const char* k, const char* v) {
-  if      (!strcmp(k, "wifi.enabled"))  wifi_enabled = (atoi(v) != 0);
+  const char* f;
+  int u = uplinkKey(k, &f);
+  if (u >= 0) {
+    UplinkConfig& c = obs[u];
+    if      (!strcmp(f, "on"))     c.on = (atoi(v) != 0);
+    else if (!strcmp(f, "host"))   strlcpy(c.host, v, sizeof(c.host));
+    else if (!strcmp(f, "port"))   c.port = atoi(v);
+    else if (!strcmp(f, "user"))   strlcpy(c.user, v, sizeof(c.user));
+    else if (!strcmp(f, "pwd"))    strlcpy(c.pwd, v, sizeof(c.pwd));
+    else if (!strcmp(f, "aud"))    strlcpy(c.aud, v, sizeof(c.aud));
+    else if (!strcmp(f, "format")) c.fmt_rx = !strcmp(v, "rx");
+    else if (!strcmp(f, "topic"))  strlcpy(c.topic, v, sizeof(c.topic));
+    else return false;
+    return true;
+  }
+  if      (!strcmp(k, "obs.owner"))     strlcpy(obs_owner, v, sizeof(obs_owner));
+  else if (!strcmp(k, "obs.email"))     strlcpy(obs_email, v, sizeof(obs_email));
+  else if (!strcmp(k, "wifi.enabled"))  wifi_enabled = (atoi(v) != 0);
   else if (!strcmp(k, "wifi.ssid"))     strlcpy(wifi_ssid, v, sizeof(wifi_ssid));
   else if (!strcmp(k, "wifi.pwd"))      strlcpy(wifi_pwd, v, sizeof(wifi_pwd));
   else if (!strcmp(k, "wifi.power"))    wifi_power = atoi(v);
@@ -68,6 +102,12 @@ void NetConfig::loadDefaults() {
   obs_enabled = false;
   strlcpy(obs_iata, OBSERVER_IATA, sizeof(obs_iata));
   strlcpy(obs_topic, OBSERVER_TOPIC, sizeof(obs_topic));
+  for (UplinkConfig& c : obs) {
+    c = UplinkConfig();
+    strlcpy(c.topic, OBS_UPLINK_TOPIC_DEFAULT, sizeof(c.topic));
+  }
+  obs_owner[0] = 0;
+  obs_email[0] = 0;
   ota_timeout_s = NET_OTA_TIMEOUT_S;
 }
 
@@ -109,6 +149,19 @@ void NetConfig::save() {
   f.printf("obs.enabled=%d\n", obs_enabled ? 1 : 0);
   f.printf("obs.iata=%s\n", obs_iata);
   f.printf("obs.topic=%s\n", obs_topic);
+  for (int i = 0; i < OBS_UPLINKS; i++) {
+    const UplinkConfig& c = obs[i];
+    f.printf("obs%d.on=%d\n", i + 1, c.on ? 1 : 0);
+    f.printf("obs%d.host=%s\n", i + 1, c.host);
+    f.printf("obs%d.port=%d\n", i + 1, c.port);
+    f.printf("obs%d.user=%s\n", i + 1, c.user);
+    f.printf("obs%d.pwd=%s\n", i + 1, c.pwd);
+    f.printf("obs%d.aud=%s\n", i + 1, c.aud);
+    f.printf("obs%d.format=%s\n", i + 1, c.fmt_rx ? "rx" : "packets");
+    f.printf("obs%d.topic=%s\n", i + 1, c.topic);
+  }
+  f.printf("obs.owner=%s\n", obs_owner);
+  f.printf("obs.email=%s\n", obs_email);
   f.printf("ota.timeout=%d\n", ota_timeout_s);
   f.close();
 }

@@ -271,6 +271,33 @@ message with the node name, model and firmware version. The topic root is separa
 `mqtt.topic`, so an observer can feed a public packet collector while telemetry stays on
 your own broker. Needs MQTT.
 
+### Observer uplinks
+
+A repeater or room server can also send the packets it hears to up to three external
+brokers at once, `obs1` to `obs3`, next to your own broker: public analyzers such as
+LetsMesh, MeshMapper or liteScope. Each uplink is empty after install and off until you
+set it; the firmware ships no broker addresses. An uplink takes a URL (`mqtt://`,
+`mqtts://`, `ws://`, `wss://`), a user and password or a signed login token (`obsN.aud`),
+and publishes to `meshcore/<area code>/<node key>/packets` with the meshcoretomqtt JSON
+used by these analyzers (or the short `/rx` format), plus a status message. The token is
+signed on the node with its own key (login `v1_<node key>`, valid 24 h) and needs the
+clock, so set NTP first. At most two TLS uplinks (`mqtts://`, `wss://`) run at once; each
+needs about 60 KB of memory. A `net ota` session pauses them. Uplinks publish only:
+nothing from a broker reaches the mesh. Not in the companion.
+
+Example, LetsMesh EU and MeshMapper:
+
+```
+set obs.iata WAW
+set obs1.host wss://mqtt-eu-v1.letsmesh.net:443/mqtt
+set obs1.aud mqtt-eu-v1.letsmesh.net
+set obs1.on 1
+set obs2.host wss://mqtt.meshmapper.net:443/mqtt
+set obs2.aud mqtt.meshmapper.net
+set obs2.on 1
+get obs.status
+```
+
 ### Network console
 
 `set tcp.enabled 1` opens the TLS console on port 5000 (repeater and room server). It
@@ -369,7 +396,7 @@ Roles: `sensor read` and `sensor scan` on repeater and room server; `get feature
 |---|---|---|
 | `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
-| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls` and `ota.net`, a companion does not; `gps` appears on boards with a GPS. | `> wifi mqtt ntp observer tls ota.net` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; `gps` appears on boards with a GPS. | `> wifi mqtt ntp observer tls ota.net obsup` |
 | `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
 
 ### WiFi
@@ -444,6 +471,31 @@ Roles: repeater, room server, companion.
 | `get/set obs.enabled <0\|1>` | Publishes every packet this node hears to `<obs.topic>/<obs.iata>/<node key>/rx`. Needs MQTT and `obs.iata`. | `0`, `1` | `0` |
 | `get/set obs.iata <code>` | Area code used in the observer topics, stored in upper case. | text, max 7 chars | empty |
 | `get/set obs.topic <topic>` | Root of the observer topics, separate from `mqtt.topic`. | text, max 23 chars | `meshcore` |
+
+### Observer uplink settings
+
+Roles: repeater, room server. `N` is 1, 2 or 3. `-` clears a text value. Changes apply at
+once (the uplink reconnects).
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `get/set obsN.on <0\|1>` | Turns the uplink on or off. Refused without `obs.iata` or `obsN.host`, and for a third TLS uplink. Off sends a final `offline` status. | `0`, `1` | `0` |
+| `get/set obsN.host <url>` | Broker URL; a bare host means `mqtt://<host>:<obsN.port>`. | `mqtt://`, `mqtts://`, `ws://`, `wss://`, max 95 chars | empty |
+| `get/set obsN.port <port>` | Port for a bare host. | `0`-`65535`, `0` = 1883 | `0` |
+| `get/set obsN.user <name>` | Broker user name (not used with a token). | text, max 32 chars | empty |
+| `get/set obsN.pwd <password>` | Broker password; `get` shows only whether it is set. | text, max 64 chars | empty |
+| `get/set obsN.aud <host>` | Set: log in with a token signed by the node (user `v1_<node key>`, audience = this value, usually the broker host). | text, max 63 chars | empty |
+| `get/set obsN.format <packets\|rx>` | `packets`: meshcoretomqtt JSON on `/packets`; `rx`: the short observer JSON on `/rx`. | `packets`, `rx` | `packets` |
+| `get/set obsN.topic <template>` | Topic template; `{iata}`, `{key}` and `{type}` are replaced. | text, max 47 chars | `meshcore/{iata}/{key}/{type}` |
+| `get/set obs.owner <key>` | Optional owner public key in the token. | 64 hex chars | empty |
+| `get/set obs.email <address>` | Optional owner e-mail in the token. | text, max 63 chars | empty |
+| `get obs.status` | State and packet counters of the three uplinks. | | `> obs1:conn pub:12 drop:0 obs2:off ...` |
+| `get obsN.diag` | One uplink: state, last error (`connect`, `tls`, `auth`, `heap`, `timeout`, `closed`), tries, seconds to the next try. | | |
+
+States: `off`, `wait wifi`, `wait clock` (token needs the clock), `wait heap` (not enough
+memory for a TLS session: retried every 30 s ten times, then every 5 min ten times, then
+every 10 min ten times, then every 30 min), `wait turn` (one TLS handshake at a time),
+`retry`, `connecting`, `conn`, `paused` (`net ota` session).
 
 Example session on a repeater: join WiFi, open the network console, send telemetry, set
 the clock.

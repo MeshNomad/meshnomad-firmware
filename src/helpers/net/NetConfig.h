@@ -55,6 +55,21 @@
 #endif
 #define NET_OTA_TIMEOUT_MAX_S 86400  // upper bound for ota.timeout (24 h)
 
+#define OBS_UPLINKS 3                // observer uplinks obs1..obs3 to external brokers
+#define OBS_UPLINK_TOPIC_DEFAULT "meshcore/{iata}/{key}/{type}"
+
+// One observer uplink. Empty on a fresh node: the user sets the broker (no presets in firmware).
+struct UplinkConfig {
+  bool on        = false;
+  char host[96]  = {0};          // URL mqtt:// mqtts:// ws:// wss://, or a bare host (= mqtt://)
+  int  port      = 0;            // bare host only; 0 = 1883
+  char user[33]  = {0};
+  char pwd[65]   = {0};
+  char aud[64]   = {0};          // set = Ed25519 token login (v1_<PUBKEY>), user/pwd ignored
+  bool fmt_rx    = false;        // false = /packets + meshcoretomqtt JSON, true = legacy /rx
+  char topic[48] = {0};          // {iata} {key} {type}
+};
+
 struct NetConfig {
   // Every switch is off on a fresh node; the user turns each one on via CLI.
   bool wifi_enabled = false;
@@ -81,6 +96,10 @@ struct NetConfig {
   char obs_iata[8]   = {0};      // uppercased on set
   char obs_topic[24] = {0};      // <obs_topic>/<IATA>/<node key>/rx|status
 
+  UplinkConfig obs[OBS_UPLINKS];
+  char obs_owner[65] = {0};      // optional token claims, shared by all uplinks
+  char obs_email[64] = {0};
+
   // each received chunk restarts it; 0 = no limit. Stored in every build; unused and not
   // exposed via CLI in the companion (NET_WIFI_EXTERNAL).
   int  ota_timeout_s = NET_OTA_TIMEOUT_S;
@@ -96,4 +115,7 @@ struct NetConfig {
   // assign() still truncates (load() reads values that were saved within the limit);
   // the CLI checks this first and refuses longer input.
   static int maxLen(const char* key);
+
+  // "obsN.<field>" -> uplink index 0..OBS_UPLINKS-1 and the field name; -1 if not an uplink key.
+  static int uplinkKey(const char* key, const char** field);
 };

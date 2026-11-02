@@ -90,6 +90,7 @@ void NetServices::begin(const char* node_id, CmdFn cmd, TelemFn telem, SetTimeFn
 #ifndef NET_WIFI_EXTERNAL
   WiFi.persistent(false);      // credentials live in /netcfg; begin() must not write NVS on every attempt
   WiFi.onEvent(onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  for (int i = 0; i < OBS_UPLINKS; i++) _up[i].init(i);
 #endif
   _cfg.load();
   applyWifiState();
@@ -107,16 +108,21 @@ void NetServices::loop() {
 #ifndef NET_WIFI_EXTERNAL
   applyWifiState();
   updateSleepInhibit();        // releases the inhibit once a stopped session is fully off
-  if (!_wifi_started) return;
+  if (!_wifi_started) {
+    uplinksLoop(false);
+    return;
+  }
   applyTcpState();
 
   if (WiFi.status() != WL_CONNECTED) {
     if (_ota.running()) _ota.stop();   // WiFi dropped: end the session, no reboot
     ntpStop();                 // re-armed on reconnect
     if (_cli_srv.connected()) cliReset();
+    uplinksLoop(false);
     return;                    // retries: applyWifiState() / WifiRetry
   }
   cliLoop();
+  uplinksLoop(true);
 #else
   if (WiFi.status() != WL_CONNECTED) {
     ntpStop();
@@ -138,6 +144,7 @@ void NetServices::stopAll() {
   ntpStop();
   _discovery_sent = false;
 #ifndef NET_WIFI_EXTERNAL
+  uplinksStop();
   _ota.stop();                 // aborts an upload (no reboot); the server ends in _ota.loop()
   cliReset();
   _cli_srv.end();              // listener closed; the key/cert stay loaded
@@ -593,7 +600,7 @@ static bool isOwnedKey(const char* key) {
   static const char* const KEYS[] = {
 #ifndef NET_WIFI_EXTERNAL
     "wifi.ssid", "wifi.pwd", "wifi.enabled", "wifi.status", "wifi.ip", "tcp.enabled", "net.cert",
-    "ota.timeout",
+    "ota.timeout", "obs.owner", "obs.email",
 #endif
     "wifi.power",
     "mqtt.enabled", "mqtt.host", "mqtt.port", "mqtt.user", "mqtt.pwd", "mqtt.topic",
@@ -652,7 +659,8 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
              !_cfg.mqtt_enabled ? "off" : (_mqtt.connected() ? "connected" : "down"),
              ntp,
              observerActive() ? _cfg.obs_iata : "off",
-             (unsigned)_obs_published, _obs_count, (unsigned)_obs_dropped);
+             (unsigned)_obs_published, observerActive() ? (int)(_obs_next - _obs_local) : 0,
+             (unsigned)_obs_dropped);
     return true;
   }
 #ifndef NET_WIFI_EXTERNAL
@@ -723,6 +731,22 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     return true;
   }
 
+#ifndef NET_WIFI_EXTERNAL
+  if (!strncmp(command, "get ", 4) && uplinkCliGet(command + 4, reply, n)) return true;
+  if (!strncmp(command, "set obs", 7)) {
+    const char* rest = command + 4;
+    const char* sp = strchr(rest, ' ');
+    const char* f;
+    char key[24];
+    size_t klen = sp ? (size_t)(sp - rest) : 0;
+    if (sp && klen < sizeof(key)) {
+      memcpy(key, rest, klen);
+      key[klen] = 0;
+      int u = NetConfig::uplinkKey(key, &f);
+      if (u >= 0) return uplinkCliSet(u, f, sp + 1, reply, n);
+    }
+  }
+#endif
   if (!strncmp(command, "get ", 4)) {
     const char* key = command + 4;
     if (!isOwnedKey(key)) return false;
@@ -981,6 +1005,11 @@ void NetServices::setObserverInfo(const char* observer_id, const char* origin,
   strlcpy(_obs_fw, fw_version, sizeof(_obs_fw));
   _obs_origin_src = origin;    // the node name in the prefs: 'set name' rewrites it in place
   syncObsOrigin();
+#ifndef NET_WIFI_EXTERNAL
+  int i = 0;
+  for (; observer_id[i] && i < 64; i++) _obs_pub[i] = toupper((unsigned char)observer_id[i]);
+  _obs_pub[i] = 0;
+#endif
 }
 
 // Re-read the node name before every observer publish, so a rename applies without a reboot.
@@ -994,33 +1023,43 @@ void NetServices::syncObsOrigin() {
   _obs_origin[j] = 0;
 }
 
+bool NetServices::uplinksOn() const {
+#ifndef NET_WIFI_EXTERNAL
+  for (const UplinkConfig& c : _cfg.obs) {
+    if (c.on && c.host[0]) return true;
+  }
+#endif
+  return false;
+}
+
 void NetServices::queueRxPacket(const uint8_t* raw, int len, float snr, float rssi) {
-  if (!observerActive() || len <= 0) return;
+  if (len <= 0 || !(observerActive() || uplinksOn())) return;
   if (len > (int)sizeof(ObsPacket::raw)) len = sizeof(ObsPacket::raw);
 
-  int slot;
-  if (_obs_count < OBS_QUEUE_SLOTS) {
-    slot = (_obs_head + _obs_count) % OBS_QUEUE_SLOTS;
-    _obs_count++;
-  } else {                                   // full: drop the oldest
-    slot = _obs_head;
-    _obs_head = (_obs_head + 1) % OBS_QUEUE_SLOTS;
-    _obs_dropped++;
-  }
-  ObsPacket& p = _obs_q[slot];
+  ObsPacket& p = _obs_q[_obs_next % OBS_RING_SLOTS];   // full: overwrites the oldest
   p.len = (uint8_t)len;
   p.snr = snr;
   p.rssi = rssi;
+  p.t = (uint32_t)time(nullptr);
   memcpy(p.raw, raw, len);
+  _obs_next++;
+  if (_obs_next - _obs_oldest > (uint32_t)OBS_RING_SLOTS) _obs_oldest = _obs_next - OBS_RING_SLOTS;
 }
 
 // At most 2 packets per loop() pass, so a burst never stalls mesh routing. No
 // timestamp field: the receiving side stamps the time.
 void NetServices::observerDrain() {
-  if (!observerActive()) return;
-  for (int n = 0; n < 2 && _obs_count > 0; n++) {
+  if (!observerActive()) {
+    _obs_local = _obs_next;                  // nothing old waits for a later switch-on
+    return;
+  }
+  if ((int32_t)(_obs_oldest - _obs_local) > 0) {   // fell behind the ring: lost the oldest
+    _obs_dropped += _obs_oldest - _obs_local;
+    _obs_local = _obs_oldest;
+  }
+  for (int n = 0; n < 2 && _obs_local != _obs_next; n++) {
     if (!_mqtt.connected()) return;          // keep the queue for the reconnect
-    ObsPacket& p = _obs_q[_obs_head];
+    ObsPacket& p = _obs_q[_obs_local % OBS_RING_SLOTS];
 
     char topic[112];
     snprintf(topic, sizeof(topic), "%s/%s/%s/rx", _cfg.obs_topic, _cfg.obs_iata, _obs_id);
@@ -1036,8 +1075,7 @@ void NetServices::observerDrain() {
     if (len > 0 && len < (int)sizeof(payload)) {
       if (_mqtt.publish(topic, payload, false)) _obs_published++;
     }
-    _obs_head = (_obs_head + 1) % OBS_QUEUE_SLOTS;
-    _obs_count--;
+    _obs_local++;
   }
 }
 
@@ -1054,5 +1092,131 @@ void NetServices::publishObsStatus(const Telemetry& t) {
     (int)(t.batt_v * 1000.0f), (unsigned)t.uptime_s, t.noise_floor);
   _mqtt.publish(topic, payload, false);
 }
+
+#ifndef NET_WIFI_EXTERNAL
+// ---- Observer uplinks obs1..obs3 (O1) ----
+static const unsigned long UPLINK_STATUS_MS = 300000UL;   // status to public brokers every 5 min
+
+void NetServices::uplinksLoop(bool wifi_up) {
+  if (!_sign || !_obs_pub[0]) return;
+  UplinkCtx ctx = {};
+  ctx.cfg = &_cfg;
+  ctx.ring = _obs_q;
+  ctx.ring_oldest = _obs_oldest;
+  ctx.ring_next = _obs_next;
+  ctx.pub_hex = _obs_pub;
+  syncObsOrigin();
+  ctx.origin = _obs_origin;
+  ctx.model = _obs_model;
+  ctx.fw = _obs_fw;
+  ctx.sign = _sign;
+  ctx.ota_active = _ota.active();
+  ctx.handshake_owner = &_handshake_owner;
+  unsigned long now = millis();
+  ctx.status_due = now - _last_up_status >= UPLINK_STATUS_MS;
+  bool first_status = false;                 // an uplink just connected: its status needs real stats
+  for (const NetUplink& u : _up) first_status = first_status || u.needsStatus();
+  if ((ctx.status_due || first_status) && wifi_up && uplinksOn()) {
+    if (ctx.status_due) _last_up_status = now;
+    Telemetry t;
+    if (_telem) _telem(t);
+    ctx.battery_mv  = (uint32_t)(t.batt_v * 1000.0f);
+    ctx.uptime_s    = t.uptime_s;
+    ctx.rx_count    = t.rx_count;
+    ctx.tx_count    = t.tx_count;
+    ctx.noise_floor = t.noise_floor;
+    ctx.has_telem   = true;
+  }
+  if (!wifi_up) ctx.status_due = false;
+  for (NetUplink& u : _up) u.loop(ctx, wifi_up);
+}
+
+void NetServices::uplinksStop() {
+  for (NetUplink& u : _up) u.restart();
+  _handshake_owner = -1;
+}
+
+int NetServices::tlsUplinksOn(int except) const {
+  int n = 0;
+  for (int i = 0; i < OBS_UPLINKS; i++) {
+    if (i != except && _cfg.obs[i].on && _cfg.obs[i].host[0] && _up[i].isTls(_cfg.obs[i])) n++;
+  }
+  return n;
+}
+
+// get obsN.<field>, obsN.diag, obs.status, obs.owner, obs.email. False if not an uplink key.
+bool NetServices::uplinkCliGet(const char* key, char* reply, size_t n) {
+  if (!strcmp(key, "obs.status")) {
+    int len = snprintf(reply, n, ">");
+    for (int i = 0; i < OBS_UPLINKS && len < (int)n; i++) {
+      len += snprintf(reply + len, n - len, " obs%d:%s pub:%u drop:%u", i + 1, _up[i].stateName(),
+                      (unsigned)_up[i].published(), (unsigned)_up[i].dropped());
+    }
+    return true;
+  }
+  if (!strcmp(key, "obs.owner")) { snprintf(reply, n, "> %s", _cfg.obs_owner); return true; }
+  if (!strcmp(key, "obs.email")) { snprintf(reply, n, "> %s", _cfg.obs_email); return true; }
+  const char* f;
+  int u = NetConfig::uplinkKey(key, &f);
+  if (u < 0) return false;
+  const UplinkConfig& c = _cfg.obs[u];
+  if      (!strcmp(f, "on"))     snprintf(reply, n, "> %d", c.on ? 1 : 0);
+  else if (!strcmp(f, "host"))   snprintf(reply, n, "> %s", c.host);
+  else if (!strcmp(f, "port"))   snprintf(reply, n, "> %d", c.port);
+  else if (!strcmp(f, "user"))   snprintf(reply, n, "> %s", c.user);
+  else if (!strcmp(f, "pwd"))    snprintf(reply, n, "> %s", c.pwd[0] ? "(set)" : "(not set)");
+  else if (!strcmp(f, "aud"))    snprintf(reply, n, "> %s", c.aud);
+  else if (!strcmp(f, "format")) snprintf(reply, n, "> %s", c.fmt_rx ? "rx" : "packets");
+  else if (!strcmp(f, "topic"))  snprintf(reply, n, "> %s", c.topic);
+  else if (!strcmp(f, "diag"))   { reply[0] = '>'; reply[1] = ' '; _up[u].diag(reply + 2, n - 2); }
+  else return false;
+  return true;
+}
+
+// Validates and stores one uplink field; "-" clears a text field. True = reply filled.
+bool NetServices::uplinkCliSet(int u, const char* f, const char* val, char* reply, size_t n) {
+  UplinkConfig& c = _cfg.obs[u];
+  if (!strcmp(f, "diag")) return false;
+  bool clear = !strcmp(val, "-");
+  if (!strcmp(f, "on")) {
+    if (strcmp(val, "0") && strcmp(val, "1")) { snprintf(reply, n, "Error, use 0 or 1"); return true; }
+    if (val[0] == '1') {
+      if (!_cfg.obs_iata[0]) { snprintf(reply, n, "Error, set obs.iata first"); return true; }
+      if (!c.host[0]) { snprintf(reply, n, "Error, set obs%d.host first", u + 1); return true; }
+      if (_up[u].isTls(c) && tlsUplinksOn(u) >= 2) { snprintf(reply, n, "Error, max 2 TLS uplinks on"); return true; }
+    }
+  } else if (!strcmp(f, "port")) {
+    int num = atoi(val);
+    if (num < 0 || num > 65535) { snprintf(reply, n, "Error, port must be 0-65535"); return true; }
+  } else if (!strcmp(f, "format")) {
+    if (strcmp(val, "packets") && strcmp(val, "rx")) { snprintf(reply, n, "Error, use packets or rx"); return true; }
+  } else if (!strcmp(f, "host") && !clear) {
+    UplinkConfig probe = c;
+    strlcpy(probe.host, val, sizeof(probe.host));
+    if (c.on && _up[u].isTls(probe) && tlsUplinksOn(u) >= 2) {
+      snprintf(reply, n, "Error, max 2 TLS uplinks on");
+      return true;
+    }
+  } else if (strcmp(f, "user") && strcmp(f, "pwd") && strcmp(f, "aud") && strcmp(f, "topic")) {
+    return false;
+  }
+  char key[24];
+  snprintf(key, sizeof(key), "obs%d.%s", u + 1, f);
+  int max_len = NetConfig::maxLen(key);
+  if (max_len >= 0 && strlen(val) > (size_t)max_len) { snprintf(reply, n, "Error, max %d chars", max_len); return true; }
+  _cfg.assign(key, clear ? (strcmp(f, "topic") ? "" : OBS_UPLINK_TOPIC_DEFAULT) : val);
+  _cfg.save();
+  _up[u].restart();                          // reconnect with the new settings
+  if (!strcmp(f, "pwd")) {
+    snprintf(reply, n, "> %s updated", key);
+  } else {
+    char tmp[120];
+    tmp[0] = 0;
+    uplinkCliGet(key, tmp, sizeof(tmp));
+    snprintf(reply, n, "> %s is now %s", key, tmp[0] == '>' ? tmp + 2 : tmp);
+  }
+  return true;
+}
+#endif
 
 #endif // ESP32 && WITH_NET_SERVICES
