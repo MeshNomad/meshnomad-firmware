@@ -3,6 +3,7 @@
 #if defined(ESP32) && defined(WITH_NET_SERVICES) && !defined(NET_WIFI_EXTERNAL)
 
 #include <time.h>
+#include <esp_idf_version.h>
 #include <esp_heap_caps.h>
 #include <esp_tls.h>
 #include <Packet.h>
@@ -200,32 +201,52 @@ bool NetUplink::start(const UplinkCtx& ctx) {
   snprintf(_lwt, sizeof(_lwt), "{\"status\":\"offline\",\"origin\":\"%s\",\"origin_id\":\"%s\"}",
            ctx.origin, ctx.pub_hex);
 
-  esp_mqtt_client_config_t cfg = {};
-  cfg.uri = _uri;
-  cfg.client_id = _client_id;
   _token_exp = 0;
+  const char* user = c.user[0] ? c.user : nullptr;
+  const char* pass = c.pwd[0] ? c.pwd : nullptr;
   if (c.aud[0]) {
     if (!buildToken(ctx, (uint32_t)time(nullptr))) return false;
     snprintf(_user, sizeof(_user), "v1_%s", ctx.pub_hex);
-    cfg.username = _user;
-    cfg.password = _token;
-  } else {
-    cfg.username = c.user[0] ? c.user : nullptr;
-    cfg.password = c.pwd[0] ? c.pwd : nullptr;
+    user = _user;
+    pass = _token;
   }
-  cfg.use_global_ca_store = tls;
-  cfg.keepalive = 30;
-  cfg.buffer_size = 1024;
-  cfg.out_buffer_size = 1280;
-  cfg.network_timeout_ms = 10000;
-  cfg.disable_auto_reconnect = true;
+
   // As NetOta httpd: idle priority, so IDLE0 keeps running through the ~7 s TLS handshake and
   // the task watchdog (IDLE0, 5 s, panic) does not reset the board (O0b).
-  cfg.task_prio = tskIDLE_PRIORITY;
+  esp_mqtt_client_config_t cfg = {};
+#if ESP_IDF_VERSION_MAJOR >= 5          // ESP32-C6 builds (pioarduino, IDF 5): nested config
+  cfg.broker.address.uri = _uri;
+  cfg.broker.verification.use_global_ca_store = tls;
+  cfg.credentials.client_id = _client_id;
+  cfg.credentials.username = user;
+  cfg.credentials.authentication.password = pass;
+  cfg.session.keepalive = 30;
+  cfg.session.last_will.topic = _topic_status;
+  cfg.session.last_will.msg = _lwt;
+  cfg.session.last_will.qos = 1;
+  cfg.session.last_will.retain = 1;
+  cfg.network.timeout_ms = 10000;
+  cfg.network.disable_auto_reconnect = true;
+  cfg.task.priority = tskIDLE_PRIORITY;
+  cfg.buffer.size = 1024;
+  cfg.buffer.out_size = 1280;
+#else                                   // IDF 4.4: flat config
+  cfg.uri = _uri;
+  cfg.use_global_ca_store = tls;
+  cfg.client_id = _client_id;
+  cfg.username = user;
+  cfg.password = pass;
+  cfg.keepalive = 30;
   cfg.lwt_topic = _topic_status;
   cfg.lwt_msg = _lwt;
   cfg.lwt_qos = 1;
   cfg.lwt_retain = 1;
+  cfg.network_timeout_ms = 10000;
+  cfg.disable_auto_reconnect = true;
+  cfg.task_prio = tskIDLE_PRIORITY;
+  cfg.buffer_size = 1024;
+  cfg.out_buffer_size = 1280;
+#endif
 
   _ev_connected = _ev_closed = false;
   _ev_err_type = _ev_tls_err = _ev_connack = 0;
