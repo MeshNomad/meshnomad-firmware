@@ -68,6 +68,8 @@ One firmware per board and role. Everything below is off until you turn it on.
 - Firmware update over the network from a browser (`net ota`).
 - MQTT telemetry with Home Assistant discovery, NTP clock sync, and an MQTT packet
   observer that publishes every packet the node hears.
+- Observer uplinks: the same packets to up to three public analyzers or other brokers at
+  once (LetsMesh, MeshMapper, liteScope), with the signed login these analyzers use.
 - `sensor read` and `sensor scan` for live sensor values and an I2C wiring check.
 
 **Companion** (`<board>_mn_cmp`)
@@ -78,8 +80,8 @@ One firmware per board and role. Everything below is off until you turn it on.
   still takes precedence.
 - WiFi settings and the app connection over WiFi work exactly as in MeshCore: the
   settings apply after a reboot and the app talks to the companion on port 5000.
-- MQTT telemetry, NTP and the observer as on the other roles. No network console and no
-  `net ota`: the companion is updated over USB.
+- MQTT telemetry, NTP and the observer as on the other roles. No network console, no
+  `net ota` and no observer uplinks: the companion is updated over USB.
 - Its USB port speaks the app protocol, not text, so there is no serial console. Commands
   reach a companion from the app, or as remote admin over LoRa from a contact you allowed
   remote CLI.
@@ -241,7 +243,7 @@ denied for five minutes (each new attempt restarts the five minutes); a failed T
 handshake counts as a failure; an idle session is closed after 120 seconds.
 
 From here, continue with [Network features](#network-features) to turn on MQTT, NTP,
-the observer or a network firmware update.
+the observer, observer uplinks or a network firmware update.
 
 ## Network features
 
@@ -297,6 +299,22 @@ set obs2.aud mqtt.meshmapper.net
 set obs2.on 1
 get obs.status
 ```
+
+Known brokers, checked on 2026-11-02. They are run by others and may change or close;
+the firmware does not depend on any of them. Set `obs.iata` to the IATA code of the
+nearest airport (not ICAO): LetsMesh corrects invalid codes.
+
+| Broker | `obsN.host` | Login |
+|---|---|---|
+| LetsMesh EU | `wss://mqtt-eu-v1.letsmesh.net:443/mqtt` | `obsN.aud mqtt-eu-v1.letsmesh.net` |
+| LetsMesh US | `wss://mqtt-us-v1.letsmesh.net:443/mqtt` | `obsN.aud mqtt-us-v1.letsmesh.net` |
+| MeshMapper | `wss://mqtt.meshmapper.net:443/mqtt` | `obsN.aud mqtt.meshmapper.net` |
+| meshcore.ca | `wss://mqtt1.meshcore.ca:443/mqtt` | `obsN.aud mqtt1.meshcore.ca` |
+| liteScope (litescope.riko.dev) | `mqtt://mqtt.riko.dev:1883` | `obsN.user litescope`, `obsN.pwd meshcore` (published on the liteScope observer page), no TLS |
+| Your own broker or liteScope | `mqtt://<host>:1883` or `mqtts://<host>:8883` | its user and password |
+
+A TLS broker must have a certificate from Let's Encrypt (ISRG Root X1) or Google Trust
+Services (GTS Root R4); others fail with `tls` in `get obsN.diag`.
 
 ### Network console
 
@@ -360,7 +378,8 @@ To report a vulnerability or to verify a downloaded firmware file, see
 | Network console | none | TLS on port 5000, admin password, repeater and room server |
 | Firmware update over WiFi | `start ota` access point | `net ota` from a browser, plus `start ota` unchanged |
 | MQTT, NTP, observer | none | all roles, off by default |
-| Password replies | `get wifi.pwd` shows the password | `(set)` or `(not set)` for `wifi.pwd` and `mqtt.pwd` |
+| Packets to public analyzers | a host computer with meshcoretomqtt next to the node | observer uplinks on the node itself: up to 3 brokers, signed login, repeater and room server, off by default |
+| Password replies | `get wifi.pwd` shows the password | `(set)` or `(not set)` for `wifi.pwd`, `mqtt.pwd` and `obsN.pwd` |
 | Sensor commands | `sensor get`, `sensor set` | plus `sensor read`, `sensor scan` |
 | Build information | `ver` | plus `get features`, `get build` |
 | Current monitors | INA226 and INA3221 on their default addresses | also found on 0x40; INA3221 on any address 0x40 to 0x43 |
@@ -415,7 +434,7 @@ commands and apply after a reboot; on the other roles they apply at once.
 | `net scan` | Lists networks in range with their signal, as the board sees them (takes 2 to 3 seconds). Repeater and room server. A scan drops the WiFi link; during a connect attempt it starts the attempts again at 1/3, and within 30 s of connecting it uses up one attempt. | | |
 | `net wifi retry` | Starts the 3 connect attempts again, for example after the attempts failed. Repeater and room server. | | |
 | `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. WiFi on the repeater and room server: `off`, `no ssid`, `try <n>/3(wl=<code>)`, `wait <n>/3` (radio off between attempts), `failed` (radio off, see `net wifi retry`), `connected`. | | |
-| `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot. | | |
+| `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot (uplink settings `obsN.*` apply at once anyway). | | |
 
 ### Network console and certificate
 
