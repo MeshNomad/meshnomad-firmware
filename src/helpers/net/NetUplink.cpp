@@ -1,4 +1,5 @@
 #include "NetUplink.h"
+#include "BoundedAppend.h"
 
 #if defined(ESP32) && defined(WITH_NET_SERVICES) && !defined(NET_WIFI_EXTERNAL)
 
@@ -169,9 +170,9 @@ bool NetUplink::buildToken(const UplinkCtx& ctx, uint32_t now) {
   int pl = snprintf(pay, sizeof(pay), "{\"publicKey\":\"%s\",\"aud\":\"%s\",\"iat\":%u,\"exp\":%u",
                     ctx.pub_hex, c.aud, (unsigned)now, (unsigned)(now + TOKEN_LIFETIME_S));
   if (ctx.cfg->obs_owner[0] && pl < (int)sizeof(pay))
-    pl += snprintf(pay + pl, sizeof(pay) - pl, ",\"owner\":\"%s\"", ctx.cfg->obs_owner);
+    pl = appendf(pay, sizeof(pay), pl, ",\"owner\":\"%s\"", ctx.cfg->obs_owner);
   if (ctx.cfg->obs_email[0] && pl < (int)sizeof(pay))
-    pl += snprintf(pay + pl, sizeof(pay) - pl, ",\"email\":\"%s\"", ctx.cfg->obs_email);
+    pl = appendf(pay, sizeof(pay), pl, ",\"email\":\"%s\"", ctx.cfg->obs_email);
   if (pl >= (int)sizeof(pay) - 1) return false;
   pay[pl++] = '}';
   pay[pl] = 0;
@@ -183,7 +184,9 @@ bool NetUplink::buildToken(const UplinkCtx& ctx, uint32_t now) {
   uint8_t sig[64];
   ctx.sign(sig, (const uint8_t*)_token, (int)o);
   _token[o++] = '.';
-  for (int i = 0; i < 64; i++) o += snprintf(_token + o, sizeof(_token) - o, "%02X", sig[i]);
+  int t = (int)o;
+  for (int i = 0; i < 64; i++) t = appendf(_token, sizeof(_token), t, "%02X", sig[i]);
+  if (t >= (int)sizeof(_token)) return false;
   _token_exp = now + TOKEN_LIFETIME_S;
   return true;
 }
@@ -313,8 +316,8 @@ int NetUplink::formatPacket(const UplinkCtx& ctx, const ObsPacket& p, char* out,
   int len;
   if (c.fmt_rx) {                    // legacy short JSON, as the local observer
     len = snprintf(out, n, "{\"origin\":\"%s\",\"raw\":\"", ctx.origin);
-    for (int i = 0; i < p.len && len < (int)n - 40; i++) len += snprintf(out + len, n - len, "%02x", p.raw[i]);
-    len += snprintf(out + len, n - len, "\",\"SNR\":%.2f,\"RSSI\":%.1f}", p.snr, p.rssi);
+    for (int i = 0; i < p.len && len < (int)n - 40; i++) len = appendf(out, n, len, "%02x", p.raw[i]);
+    len = appendf(out, n, len, "\",\"SNR\":%.2f,\"RSSI\":%.1f}", p.snr, p.rssi);
     return len;
   }
 
@@ -324,31 +327,31 @@ int NetUplink::formatPacket(const UplinkCtx& ctx, const ObsPacket& p, char* out,
   if (p.t >= CLOCK_MIN_EPOCH) {
     char iso[40], hms[9], dmy[11];
     isoTime(p.t, iso, sizeof(iso), hms, dmy);
-    len += snprintf(out + len, n - len, ",\"timestamp\":\"%s\",\"time\":\"%s\",\"date\":\"%s\"", iso, hms, dmy);
+    len = appendf(out, n, len, ",\"timestamp\":\"%s\",\"time\":\"%s\",\"date\":\"%s\"", iso, hms, dmy);
   }
-  len += snprintf(out + len, n - len, ",\"type\":\"PACKET\",\"direction\":\"rx\",\"len\":\"%u\"", p.len);
+  len = appendf(out, n, len, ",\"type\":\"PACKET\",\"direction\":\"rx\",\"len\":\"%u\"", p.len);
   if (parsed) {
     static const char ROUTE[] = {'T', 'F', 'D', 'U'};   // PH_ROUTE_MASK values 0..3
     uint8_t h[MAX_HASH_SIZE];
     pkt.calculatePacketHash(h);
-    len += snprintf(out + len, n - len, ",\"packet_type\":\"%u\",\"route\":\"%c\",\"payload_len\":\"%u\",\"hash\":\"",
+    len = appendf(out, n, len, ",\"packet_type\":\"%u\",\"route\":\"%c\",\"payload_len\":\"%u\",\"hash\":\"",
                     (unsigned)pkt.getPayloadType(), ROUTE[pkt.getRouteType()], (unsigned)pkt.payload_len);
-    for (int i = 0; i < MAX_HASH_SIZE; i++) len += snprintf(out + len, n - len, "%02X", h[i]);
-    len += snprintf(out + len, n - len, "\"");
+    for (int i = 0; i < MAX_HASH_SIZE; i++) len = appendf(out, n, len, "%02X", h[i]);
+    len = appendf(out, n, len, "\"");
     if (pkt.isRouteDirect() && pkt.getPathHashCount() > 0) {
-      len += snprintf(out + len, n - len, ",\"path\":[");
+      len = appendf(out, n, len, ",\"path\":[");
       int sz = pkt.getPathHashSize();
       for (int hop = 0; hop < pkt.getPathHashCount(); hop++) {
-        len += snprintf(out + len, n - len, hop ? ",\"" : "\"");
-        for (int b = 0; b < sz; b++) len += snprintf(out + len, n - len, "%02x", pkt.path[hop * sz + b]);
-        len += snprintf(out + len, n - len, "\"");
+        len = appendf(out, n, len, "%s", hop ? ",\"" : "\"");
+        for (int b = 0; b < sz; b++) len = appendf(out, n, len, "%02x", pkt.path[hop * sz + b]);
+        len = appendf(out, n, len, "\"");
       }
-      len += snprintf(out + len, n - len, "]");
+      len = appendf(out, n, len, "]");
     }
   }
-  len += snprintf(out + len, n - len, ",\"raw\":\"");
-  for (int i = 0; i < p.len && len < (int)n - 48; i++) len += snprintf(out + len, n - len, "%02X", p.raw[i]);
-  len += snprintf(out + len, n - len, "\",\"SNR\":\"%.2f\",\"RSSI\":\"%.0f\"}", p.snr, p.rssi);
+  len = appendf(out, n, len, ",\"raw\":\"");
+  for (int i = 0; i < p.len && len < (int)n - 48; i++) len = appendf(out, n, len, "%02X", p.raw[i]);
+  len = appendf(out, n, len, "\",\"SNR\":\"%.2f\",\"RSSI\":\"%.0f\"}", p.snr, p.rssi);
   return len;
 }
 
