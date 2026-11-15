@@ -138,6 +138,7 @@ private:
   unsigned long _ntp_wait_start_ms = 0;
   unsigned long _last_ntp_apply_ms = 0;
   unsigned int  _ntp_retries = 0;
+  bool _ntp_fresh = false;      // 'net ntp sync': only a new server reply ends the wait
   void ntpLoop();
   void ntpStop();
 

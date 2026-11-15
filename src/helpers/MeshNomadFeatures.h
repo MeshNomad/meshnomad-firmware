@@ -23,7 +23,9 @@ inline void meshnomadFeatures(char* out, size_t n) {
   add("wifi");
 #endif
 #ifdef WITH_NET_SERVICES
-  add("mqtt"); add("ntp"); add("observer");
+  add("mqtt"); add("ntp");
+  add("ntp.sync");   // 'net ntp sync': clock set from NTP on demand
+  add("observer");
 #endif
 #if defined(ESP32) && defined(WITH_NET_SERVICES) && !defined(NET_WIFI_EXTERNAL)
   add("tls");    // network console over TLS (NetTls); not in the companion

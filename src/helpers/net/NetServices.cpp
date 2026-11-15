@@ -3,6 +3,7 @@
 #include "NetServices.h"
 #include "NetHooks.h"
 #include "NetWifiToken.h"
+#include "NetNtpSync.h"
 #include <time.h>
 #include <esp_sntp.h>
 #include <esp_idf_version.h>
@@ -248,6 +249,7 @@ void NetServices::ntpStop() {
     NET_SNTP_STOP();
     _ntp_state = NTP_IDLE;
   }
+  _ntp_fresh = false;
 }
 
 void NetServices::ntpLoop() {
@@ -266,8 +268,11 @@ void NetServices::ntpLoop() {
   }
 
   if (_ntp_state == NTP_WAITING) {
-    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED || time(nullptr) > 1600000000) {
+    // 'net ntp sync' (_ntp_fresh) waits for a new server reply, not for a clock already set.
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED ||
+        (!_ntp_fresh && time(nullptr) > 1600000000)) {
       _set_time((uint32_t)time(nullptr));
+      _ntp_fresh = false;
       _ntp_state = NTP_SYNCED;
       _last_ntp_apply_ms = now;
     } else if (now - _ntp_wait_start_ms > 60000UL && _ntp_retries < 10) {
@@ -634,6 +639,16 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     return true;
   }
 #endif
+  if (!strcmp(command, "net ntp sync")) {
+    NtpSyncCheck c = netNtpSyncCheck(_cfg.ntp_enabled && _set_time, isWifiConnected());
+    if (c == NTP_SYNC_START) {
+      ntpStop();                              // ntpLoop() starts SNTP again on the next pass
+      sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
+      _ntp_fresh = true;
+    }
+    snprintf(reply, n, "%s", netNtpSyncReply(c));
+    return true;
+  }
   if (!strcmp(command, "net status")) {
     const char* ntp = !_cfg.ntp_enabled ? "off"
                     : (_ntp_state == NTP_SYNCED ? "synced"

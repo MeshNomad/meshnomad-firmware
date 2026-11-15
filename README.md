@@ -415,7 +415,7 @@ Roles: `sensor read` and `sensor scan` on repeater and room server; `get feature
 |---|---|---|
 | `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
-| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; `gps` appears on boards with a GPS. | `> wifi mqtt ntp observer tls ota.net obsup` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
 | `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
 
 ### WiFi
@@ -480,6 +480,7 @@ Roles: repeater, room server, companion.
 | `get/set ntp.enabled <0\|1>` | Sets the node's clock from an NTP server. Needs WiFi. | `0`, `1` | `0` |
 | `get/set ntp.server <host>` | NTP server. | text, max 63 chars | `pool.ntp.org` |
 | `get/set ntp.interval <s>` | How often the clock is set again. | `60` and up | `90000` |
+| `net ntp sync` | Sets the clock from the NTP server now: `> ntp sync started`, then `net status` shows `ntp:waiting` and `ntp:synced`. Refused with `Error: NTP off, set ntp.enabled 1 first` or `Error: WiFi not connected`. Feature `ntp.sync`. | | |
 
 ### Observer settings
 
