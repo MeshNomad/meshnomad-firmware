@@ -96,6 +96,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0               # release notes: history and tags since the previous release
 
       - name: Setup Build Environment
         uses: ./.github/actions/setup-build-environment
@@ -118,11 +119,45 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 tool/meshnomad/partition_changes.py "${GITHUB_REF#refs/tags/}" out > release-notes.md
 
+      # Release notes from the MeshNomad commits since the previous release of the same role
+      # (cliff.toml; MeshCore commits are excluded through .cliffignore).
+      - name: Determine release notes range
+        id: range
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PREFIX="${TAG%%v[0-9]*}"
+          PREV=$(git describe --tags --abbrev=0 --match "${PREFIX}v[0-9]*" "${TAG}^" 2>/dev/null || true)
+          [ -n "$PREV" ] || PREV=81dbae59   # MeshCore 1.18.0, the base of the fork
+          sh tool/meshnomad/cliff_ignore.sh
+          {
+            echo "range=${PREV}..${TAG}"
+            echo "pattern=^${PREFIX}v[0-9]"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release notes range: ${PREV}..${TAG}"
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
+        with:
+          config: cliff.toml
+          args: --strip header --tag-pattern "${{ steps.range.outputs.pattern }}" ${{ steps.range.outputs.range }}
+        env:
+          OUTPUT: CHANGES.md
+
+      - name: Assemble release notes
+        run: |
+          {
+            echo
+            cat CHANGES.md
+            echo
+            echo "Full history: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main-meshnomad/CHANGELOG.md)"
+          } >> release-notes.md
+          cat release-notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: "${{ inputs.release_title_prefix }}-${{ env.GIT_TAG_VERSION }}"
           body_path: release-notes.md
-          generate_release_notes: true
+          generate_release_notes: false
           draft: true
           files: out/*

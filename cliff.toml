@@ -1,0 +1,57 @@
+# git-cliff configuration for MeshNomad firmware release notes and CHANGELOG.md.
+#
+# One release has three tags (rpt-, cmp-, rs- + version). CHANGELOG.md follows the cmp- tags;
+# the release workflow of each role passes its own --tag-pattern and range. Commits that come
+# from MeshCore (merged upstream releases) are listed in .cliffignore by
+# tool/meshnomad/cliff_ignore.sh before git-cliff runs, so only MeshNomad commits appear.
+#
+# CHANGELOG.md: the lists are generated; the "Highlights" of each release are written by hand
+# after generating. Add a new release with
+#   tool/meshnomad/cliff_ignore.sh && git-cliff --tag cmp-v<version> --unreleased --prepend CHANGELOG.md
+# and write its Highlights above the generated lists.
+
+[changelog]
+# Stripped in CI (--strip header) so the release body stays header-free.
+header = """
+# Changelog
+
+MeshNomad firmware releases. Each release is published three times, once per role, with the
+tags `rpt-`, `cmp-` and `rs-` followed by the version (see
+[Release channels](README.md#release-channels)). MeshCore's own changes are in the
+[MeshCore releases](https://github.com/meshcore-dev/MeshCore/releases).
+"""
+body = """
+{%- if version %}## v{{ version | split(pat="-v") | last }}{% if timestamp %} ({{ timestamp | date(format="%Y-%m-%d") }}){% endif %}{% else %}## Unreleased{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+
+{% for commit in commits -%}
+- {{ commit.message | split(pat="\n") | first | upper_first }}
+{% endfor -%}
+{% endfor %}
+"""
+trim = false
+
+[git]
+conventional_commits = true
+# Unconventional messages land in "Other changes" instead of disappearing.
+filter_unconventional = false
+split_commits = false
+tag_pattern = "^cmp-v[0-9]"
+skip_tags = "^dev-"
+commit_parsers = [
+  # Internal tooling references never go into public notes.
+  { message = "(?i)claude", skip = true },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Refactoring" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
+  { message = "^test", group = "<!-- 5 -->Testing" },
+  { message = "^(ci|build)", group = "<!-- 6 -->CI" },
+  { message = "^chore", group = "<!-- 7 -->Chores" },
+  { message = ".*", group = "<!-- 8 -->Other changes" },
+]
+filter_commits = false
+sort_commits = "newest"
