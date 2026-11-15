@@ -192,6 +192,7 @@ private:
   WiFiClient    _mqtt_wifi;
   PubSubClient  _mqtt{_mqtt_wifi};
   unsigned long _last_mqtt_retry = 0;
+  int _pw_applied = 0;          // wifi.power now in the driver (0 = chip default, -1 = write again)
   int _mq_fd = -1;              // broker socket while its TCP connect is in progress
   unsigned long _mq_start = 0;
   unsigned long _last_publish = 0;

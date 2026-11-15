@@ -5,6 +5,7 @@
 #include "NetWifiToken.h"
 #include "NetNtpSync.h"
 #include "NetMqttTcp.h"
+#include "NetWifiPower.h"
 #include <lwip/sockets.h>
 #include <errno.h>
 #include <time.h>
@@ -141,7 +142,14 @@ void NetServices::loop() {
 
 // ---- WiFi ----
 void NetServices::applyWifiPower() {
-  if (_cfg.wifi_power > 0) WiFi.setTxPower(dbmToPower(_cfg.wifi_power));
+  // Writes the driver only when wifi.power differs from what the driver holds (rule:
+  // NetWifiPower.h). On the companion this runs on every loop() pass and then makes no
+  // driver call; setTxPower() refuses until the station has started and is tried again.
+  // The driver keeps a set power across a WiFi restart, so going back to 0 has to write
+  // the default itself: the highest step the core offers.
+  if (!netWifiPowerDue(_cfg.wifi_power, _pw_applied)) return;
+  wifi_power_t p = _cfg.wifi_power > 0 ? dbmToPower(_cfg.wifi_power) : WIFI_POWER_19_5dBm;
+  if (WiFi.setTxPower(p)) _pw_applied = _cfg.wifi_power;
 }
 
 void NetServices::stopAll() {
@@ -199,6 +207,7 @@ void NetServices::radioOn() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(false);   // WifiRetry owns retries: the core's own loop scans non-stop
   wifiBegin();
+  if (_cfg.wifi_power > 0) _pw_applied = -1;   // a set power is written again at every WiFi start
   applyWifiPower();
   _wifi_started = true;
   ensureTls();                 // after WIFI_STA: the radio feeds the hardware RNG
