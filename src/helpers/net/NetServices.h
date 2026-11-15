@@ -54,7 +54,8 @@ typedef void (*CmdFn)(const char* cmd, char* reply, size_t reply_len);
 // Fills a Telemetry snapshot from board/mesh state.
 typedef void (*TelemFn)(Telemetry& out);
 // Sets the node's RTC to an absolute UTC epoch (seconds).
-typedef void (*SetTimeFn)(uint32_t epoch);
+// from_server: a server reply arrived in this boot (the epoch is the server's time).
+typedef void (*SetTimeFn)(uint32_t epoch, bool from_server);
 // Returns the node's current admin password (checked by the TCP console).
 typedef const char* (*PasswordFn)();
 // Allows (false) or forbids (true) light sleep; WiFi needs the board awake.
@@ -138,6 +139,7 @@ private:
   unsigned long _ntp_wait_start_ms = 0;
   unsigned long _last_ntp_apply_ms = 0;
   unsigned int  _ntp_retries = 0;
+  bool _ntp_real = false;       // an SNTP server reply arrived in this boot
   bool _ntp_fresh = false;      // 'net ntp sync': only a new server reply ends the wait
   void ntpLoop();
   void ntpStop();

@@ -264,6 +264,13 @@ through Home Assistant discovery, so they appear in Home Assistant without manua
 
 `set ntp.enabled 1` sets the node's clock from `ntp.server` (UTC) and refreshes it every
 `ntp.interval` seconds, so a node without a GPS keeps the right time across reboots.
+Once the server has answered, its time replaces the node's clock even when the clock was
+far off or ahead (for example after a wrong time reached it); on a companion, contact
+times that were ahead of the corrected clock are pulled back to it. After such a step
+back, restart the node. Nodes that already heard it with the future time ignore its
+adverts, and repeaters or room servers refuse its login, until they drop their stored
+entry for it. A companion that already holds a time at boot keeps it; it no longer takes
+the time of its newest contact.
 
 ### Packet observer
 

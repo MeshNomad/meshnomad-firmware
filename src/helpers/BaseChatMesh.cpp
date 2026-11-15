@@ -1,5 +1,6 @@
 #include <helpers/BaseChatMesh.h>
 #include <Utils.h>
+#include <helpers/RtcBootstrap.h>
 
 #ifndef SERVER_RESPONSE_DELAY
   #define SERVER_RESPONSE_DELAY   300
@@ -58,6 +59,7 @@ void BaseChatMesh::sendAckTo(const ContactInfo& dest, const uint8_t* ack_hash, u
 }
 
 void BaseChatMesh::bootstrapRTCfromContacts() {
+  if (!rtcBootstrapWanted(getRTCClock()->getCurrentTime())) return;   // MeshNomad: a set clock stays
   uint32_t latest = 0;
   for (int i = 0; i < num_contacts; i++) {
     if (contacts[i].lastmod > latest) {
@@ -67,6 +69,19 @@ void BaseChatMesh::bootstrapRTCfromContacts() {
   if (latest != 0) {
     getRTCClock()->setCurrentTime(latest + 1);
   }
+}
+
+// MeshNomad: after the clock stepped back, contact times written by the old clock would
+// stay ahead of it; pull them back to now so they sort and expire like the rest again.
+bool BaseChatMesh::clampContactsLastmod(uint32_t now) {
+  bool changed = false;
+  for (int i = 0; i < num_contacts; i++) {
+    if (contacts[i].lastmod > now) {
+      contacts[i].lastmod = now;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 ContactInfo* BaseChatMesh::allocateContactSlot(bool transient_only) {

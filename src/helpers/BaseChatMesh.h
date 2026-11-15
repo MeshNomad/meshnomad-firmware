@@ -93,6 +93,7 @@ protected:
   }
 
   void bootstrapRTCfromContacts();
+  bool clampContactsLastmod(uint32_t now);   // MeshNomad: true when a contact time was pulled back
 
   void resetContacts() {
     memset(contacts, 0, sizeof(contacts[0])*MAX_ANON_CONTACTS);   // set all to have type = ADV_TYPE_NONE(0)

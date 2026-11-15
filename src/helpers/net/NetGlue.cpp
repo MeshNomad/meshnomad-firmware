@@ -1,6 +1,7 @@
 #if defined(ESP32) && defined(WITH_NET_SERVICES)
 
 #include "NetGlue.h"
+#include "NetEpoch.h"
 #include <CayenneLPP.h>
 #include <helpers/sensors/LPPDataHelpers.h>
 
@@ -52,12 +53,10 @@ void net_fill_sensor_telemetry(SensorManager& sensors, Telemetry& t) {
   }
 }
 
-void net_apply_epoch(mesh::RTCClock& rtc, uint32_t epoch) {
-  // getCurrentTimeUnique() is monotonic, so a small backward step never reuses
-  // packet timestamps; a clock that ran fast can be corrected too.
-  uint32_t now = rtc.getCurrentTime();
-  int32_t delta = (int32_t)(epoch - now);
-  if (now < 1600000000UL || (delta > -3600 && delta < 3600)) {
+void net_apply_epoch(mesh::RTCClock& rtc, uint32_t epoch, bool from_server) {
+  // getCurrentTimeUnique() is monotonic, so a backward step never reuses packet
+  // timestamps in this boot; a clock that ran fast or sits in the future is corrected.
+  if (netEpochAccept(rtc.getCurrentTime(), epoch, from_server)) {
     rtc.setCurrentTime(epoch);
   }
 }

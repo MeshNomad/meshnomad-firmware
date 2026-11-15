@@ -949,6 +949,11 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
 #endif
 }
 
+// MeshNomad: the clock stepped back (NTP); contact times ahead of it are corrected and saved.
+void MyMesh::clampFutureContacts(uint32_t now) {
+  if (clampContactsLastmod(now)) dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
+}
+
 void MyMesh::begin() {
   BaseChatMesh::begin();
 

@@ -50,8 +50,8 @@ static void net_telem(Telemetry& t) {
   net_fill_sensor_telemetry(sensors, t);
 }
 
-static void net_set_time(uint32_t epoch) {
-  net_apply_epoch(rtc_clock, epoch);
+static void net_set_time(uint32_t epoch, bool from_server) {
+  net_apply_epoch(rtc_clock, epoch, from_server);
 }
 
 static const char* net_console_password() {

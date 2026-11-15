@@ -6,6 +6,7 @@
 #include "MyMesh.h"
 #include <helpers/net/NetServices.h>
 #include <helpers/net/NetGlue.h>
+#include <helpers/net/NetEpoch.h>
 
 static NetServices net;
 
@@ -30,8 +31,13 @@ static void net_telem(Telemetry& t) {
   net_fill_sensor_telemetry(sensors, t);
 }
 
-static void net_set_time(uint32_t epoch) {
-  net_apply_epoch(rtc_clock, epoch);
+static void net_set_time(uint32_t epoch, bool from_server) {
+  uint32_t before = rtc_clock.getCurrentTime();
+  net_apply_epoch(rtc_clock, epoch, from_server);
+  uint32_t now = rtc_clock.getCurrentTime();
+  // The clock came back from the future: contact times written by the old clock would
+  // stay ahead of it.
+  if (netSteppedBack(before, now)) the_mesh.clampFutureContacts(now);
 }
 
 void meshnomad_net_setup() {

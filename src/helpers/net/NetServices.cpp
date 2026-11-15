@@ -269,9 +269,10 @@ void NetServices::ntpLoop() {
 
   if (_ntp_state == NTP_WAITING) {
     // 'net ntp sync' (_ntp_fresh) waits for a new server reply, not for a clock already set.
-    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED ||
-        (!_ntp_fresh && time(nullptr) > 1600000000)) {
-      _set_time((uint32_t)time(nullptr));
+    bool replied = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+    if (replied) _ntp_real = true;
+    if (replied || (!_ntp_fresh && time(nullptr) > 1600000000)) {
+      _set_time((uint32_t)time(nullptr), _ntp_real);
       _ntp_fresh = false;
       _ntp_state = NTP_SYNCED;
       _last_ntp_apply_ms = now;
@@ -286,7 +287,8 @@ void NetServices::ntpLoop() {
 
   // NTP_SYNCED: SNTP keeps the system time fresh; copy it to the RTC periodically.
   if (now - _last_ntp_apply_ms >= (unsigned long)_cfg.ntp_interval_s * 1000UL) {
-    _set_time((uint32_t)time(nullptr));
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) _ntp_real = true;
+    _set_time((uint32_t)time(nullptr), _ntp_real);
     _last_ntp_apply_ms = now;
   }
 }
