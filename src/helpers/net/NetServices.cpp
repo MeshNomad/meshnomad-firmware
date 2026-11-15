@@ -4,6 +4,9 @@
 #include "NetHooks.h"
 #include "NetWifiToken.h"
 #include "NetNtpSync.h"
+#include "NetMqttTcp.h"
+#include <lwip/sockets.h>
+#include <errno.h>
 #include <time.h>
 #include <esp_sntp.h>
 #include <esp_idf_version.h>
@@ -885,7 +888,63 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
 void NetServices::topicState(char* out, size_t n)  { snprintf(out, n, "%s/%s/state",  _cfg.mqtt_topic, _node_id); }
 void NetServices::topicStatus(char* out, size_t n) { snprintf(out, n, "%s/%s/status", _cfg.mqtt_topic, _node_id); }
 
+// The TCP connect to the broker never blocks loop(): mqttTcpStart() opens a non-blocking
+// socket, mqttTcpPoll() checks it once per pass and hands the connected socket to the
+// client. A broker that does not answer costs no loop time. A host name is not handled
+// here (see mqttLoop()).
+void NetServices::mqttTcpAbort() {
+  if (_mq_fd >= 0) {
+    close(_mq_fd);
+    _mq_fd = -1;
+  }
+}
+
+bool NetServices::mqttTcpStart(IPAddress ip) {
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) return false;
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = (uint32_t)ip;
+  addr.sin_port = htons(_cfg.mqtt_port);
+  if (lwip_connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0 && errno != EINPROGRESS) {
+    close(fd);
+    return false;
+  }
+  _mq_fd = fd;
+  _mq_start = millis();
+  return true;
+}
+
+bool NetServices::mqttTcpPoll() {
+  fd_set ws;
+  FD_ZERO(&ws);
+  FD_SET(_mq_fd, &ws);
+  struct timeval zero = {0, 0};
+  int res = select(_mq_fd + 1, nullptr, &ws, nullptr, &zero);
+  int so_error = 0;
+  if (res > 0) {
+    socklen_t len = sizeof(so_error);
+    if (getsockopt(_mq_fd, SOL_SOCKET, SO_ERROR, &so_error, &len) < 0) so_error = errno ? errno : -1;
+  }
+  switch (netMqttTcpPoll(res, so_error, millis() - _mq_start)) {
+    case MQ_TCP_WAIT: return false;
+    case MQ_TCP_FAIL: mqttTcpAbort(); return false;
+    case MQ_TCP_READY: break;
+  }
+  int fd = _mq_fd;
+  _mq_fd = -1;
+  struct timeval tv = {(long)(MQ_TCP_TIMEOUT_MS / 1000), 0};   // as the client's own connect sets them
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
+  _mqtt_wifi = WiFiClient(fd);                // owns the socket from here on
+  return true;
+}
+
 void NetServices::mqttOffline() {
+  mqttTcpAbort();
   if (_mqtt.connected()) {
     char st[80];
     topicStatus(st, sizeof(st));
@@ -925,10 +984,20 @@ void NetServices::mqttLoop() {
   }
 
   if (!_mqtt.connected()) {
-    unsigned long now = millis();
-    if (now - _last_mqtt_retry < 5000UL) return;
-    _last_mqtt_retry = now;
-    if (!mqttConnect()) return;
+    if (_mq_fd >= 0) {
+      if (!mqttTcpPoll()) return;             // still connecting, or failed: retry later
+    } else {
+      unsigned long now = millis();
+      if (now - _last_mqtt_retry < 5000UL) return;
+      _last_mqtt_retry = now;
+      IPAddress ip;
+      if (ip.fromString(_cfg.mqtt_host)) {
+        mqttTcpStart(ip);                     // continues in mqttTcpPoll() on later passes
+        return;
+      }
+      // A host name: the client resolves and connects itself, which blocks.
+    }
+    if (!mqttConnect()) return;               // on a connected socket: CONNECT + CONNACK only
   }
   _mqtt.loop();
 

@@ -192,10 +192,15 @@ private:
   WiFiClient    _mqtt_wifi;
   PubSubClient  _mqtt{_mqtt_wifi};
   unsigned long _last_mqtt_retry = 0;
+  int _mq_fd = -1;              // broker socket while its TCP connect is in progress
+  unsigned long _mq_start = 0;
   unsigned long _last_publish = 0;
   bool          _discovery_sent = false;
   void mqttLoop();
   bool mqttConnect();
+  bool mqttTcpStart(IPAddress ip);   // non-blocking TCP connect to the broker
+  bool mqttTcpPoll();                // true once the socket is connected and handed to _mqtt_wifi
+  void mqttTcpAbort();
   void mqttOffline();
   void publishDiscovery();
   void publishState(const Telemetry& t);
