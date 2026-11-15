@@ -39,6 +39,9 @@ filter_unconventional = false
 split_commits = false
 tag_pattern = "^cmp-v[0-9]"
 skip_tags = "^dev-"
+# Tags without a release: their commits count to the next release. The .5 tags were pushed on a
+# commit whose release workflow could not start; release tags cannot be moved or deleted here.
+ignore_tags = "-v1\\.18\\.0-meshnomad\\.5$"
 commit_parsers = [
   # Internal tooling references never go into public notes.
   { message = "(?i)claude", skip = true },

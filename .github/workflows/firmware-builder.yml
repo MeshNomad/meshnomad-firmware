@@ -121,12 +121,17 @@ jobs:
 
       # Release notes from the MeshNomad commits since the previous release of the same role
       # (cliff.toml; MeshCore commits are excluded through .cliffignore).
+      # From the previous published release of the same role, as partition_changes.py does (a tag
+      # without a release does not count).
       - name: Determine release notes range
         id: range
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           PREFIX="${TAG%%v[0-9]*}"
-          PREV=$(git describe --tags --abbrev=0 --match "${PREFIX}v[0-9]*" "${TAG}^" 2>/dev/null || true)
+          PREV=$( { gh release list --limit 200 --json tagName --jq '.[].tagName' | grep "^${PREFIX}v[0-9]" | grep -vx "$TAG"; echo "$TAG"; } \
+                  | sort -V | grep -x -B1 "$TAG" | grep -vx "$TAG" || true)
           [ -n "$PREV" ] || PREV=81dbae59   # MeshCore 1.18.0, the base of the fork
           sh tool/meshnomad/cliff_ignore.sh
           {
