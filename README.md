@@ -12,6 +12,7 @@ Firmware for ESP32 LoRa mesh radios used with the MeshNomad app. It is a fork of
 protocol and routing untouched and adds network features on top.
 
 Downloads: [Releases](https://github.com/MeshNomad/meshnomad-firmware/releases)
+Changes: [CHANGELOG.md](CHANGELOG.md)
 App: [MeshNomad app](https://github.com/MeshNomad/meshnomad)
 Website: https://meshnomad.org
 
@@ -471,7 +472,7 @@ Roles: repeater, room server, companion.
 | Command | What it does | Values | Default |
 |---|---|---|---|
 | `get/set mqtt.enabled <0\|1>` | Telemetry to an MQTT broker with Home Assistant discovery. Needs WiFi and `mqtt.host`. | `0`, `1` | `0` |
-| `get/set mqtt.host <host>` | Broker address. | text, max 63 chars | empty |
+| `get/set mqtt.host <host>` | Broker address. Use an IP address: with a host name each connect attempt to an unreachable broker holds the node for a few seconds (it resolves the name and connects in one blocking call), with an IP address it does not. | text, max 63 chars | empty |
 | `get/set mqtt.port <port>` | Broker port. | `1` to `65535` | `1883` |
 | `get/set mqtt.user <name>` | Broker login. | text, max 32 chars | empty |
 | `get/set mqtt.pwd <password>` | Broker password; `get` replies `(set)` or `(not set)`. | text, max 64 chars | empty |
