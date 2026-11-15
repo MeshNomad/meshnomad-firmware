@@ -5,7 +5,11 @@ tags `rpt-`, `cmp-` and `rs-` followed by the version (see
 [Release channels](README.md#release-channels)). MeshCore's own changes are in the
 [MeshCore releases](https://github.com/meshcore-dev/MeshCore/releases).
 
-## v1.18.0-meshnomad.5 (2026-11-15)
+## v1.18.0-meshnomad.6 (2026-11-15)
+
+The tags `rpt-`, `cmp-` and `rs-v1.18.0-meshnomad.5` exist but have no release: the release
+workflow could not start on them, and release tags cannot be moved. `.6` contains everything
+that was meant for `.5`.
 
 Partition tables unchanged since `.4`: the `.bin` file at `0x10000` updates every board and
 keeps its settings.
@@ -38,6 +42,16 @@ keeps its settings.
 - Keep a set clock at boot and let a server NTP time correct it
 - Stop the Home Assistant discovery burst at the first failed publish
 - Report companion WiFi as off in net status when the driver is not running
+
+### Documentation
+
+- Link the changelog and note the host-name limit of mqtt.host
+
+### CI
+
+- Count release notes from the previous published release
+- Run git-cliff from PyPI in the release job
+- Release notes and changelog from git-cliff
 
 ### Chores
 
