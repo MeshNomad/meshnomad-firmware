@@ -2,6 +2,7 @@
 
 #include "NetServices.h"
 #include "NetHooks.h"
+#include "NetWifiToken.h"
 #include <time.h>
 #include <esp_sntp.h>
 #include <esp_idf_version.h>
@@ -649,9 +650,12 @@ bool NetServices::handleCli(const char* command, char* reply, size_t n) {
     else if (ph == WifiRetry::ATTEMPT && !up)
       snprintf(wifi_st, sizeof(wifi_st), "try %u/%u(wl=%d)", att, (unsigned)WifiRetry::MAX_ATTEMPTS, (int)WiFi.status());
     else
-#endif
     if (up) strcpy(wifi_st, "connected");
     else snprintf(wifi_st, sizeof(wifi_st), "connecting(wl=%d)", (int)WiFi.status());
+#else
+    netExternalWifiToken(wifi_st, sizeof(wifi_st), (WiFi.getMode() & WIFI_MODE_STA) != 0, up,
+                         (int)WiFi.status());
+#endif
     snprintf(reply, n, "wifi:%s ip:%s rssi:%ddBm mqtt:%s ntp:%s obs:%s pub:%u q:%d drop:%u",
              wifi_st,
              up ? WiFi.localIP().toString().c_str() : "-",

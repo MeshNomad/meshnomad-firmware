@@ -433,7 +433,7 @@ commands and apply after a reboot; on the other roles they apply at once.
 | `get/set wifi.power <dBm>` | Transmit power, applied at once; `0` = chip default. | `0` to `20` | `0` |
 | `net scan` | Lists networks in range with their signal, as the board sees them (takes 2 to 3 seconds). Repeater and room server. A scan drops the WiFi link; during a connect attempt it starts the attempts again at 1/3, and within 30 s of connecting it uses up one attempt. | | |
 | `net wifi retry` | Starts the 3 connect attempts again, for example after the attempts failed. Repeater and room server. | | |
-| `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. WiFi on the repeater and room server: `off`, `no ssid`, `try <n>/3(wl=<code>)`, `wait <n>/3` (radio off between attempts), `failed` (radio off, see `net wifi retry`), `connected`. | | |
+| `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. WiFi on the repeater and room server: `off`, `no ssid`, `try <n>/3(wl=<code>)`, `wait <n>/3` (radio off between attempts), `failed` (radio off, see `net wifi retry`), `connected`. WiFi on the companion: `off` (not started at boot; a changed `wifi.enabled` applies after a restart), `connecting(wl=<code>)`, `connected`. | | |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot (uplink settings `obsN.*` apply at once anyway). | | |
 
 ### Network console and certificate
