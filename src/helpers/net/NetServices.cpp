@@ -1011,7 +1011,12 @@ void NetServices::publishDiscovery() {
     if (len < (int)sizeof(payload) - 1)
       snprintf(payload + len, sizeof(payload) - len, "}");
 
-    _mqtt.publish(cfg_topic, payload, true);
+    // A link that stopped taking data blocks every further write for seconds: drop it and
+    // let mqttLoop() reconnect (the discovery is sent again after the next connect).
+    if (!_mqtt.publish(cfg_topic, payload, true)) {
+      _mqtt_wifi.stop();
+      return;
+    }
     _mqtt.loop();
   }
 }
