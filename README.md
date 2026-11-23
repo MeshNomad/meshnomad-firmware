@@ -23,7 +23,8 @@ Website: https://meshnomad.org
 Contents: [What MeshNomad is](#what-meshnomad-is) |
 [Features by role](#features-by-role) | [Supported boards](#supported-boards) |
 [Download and flash](#download-and-flash) | [First setup](#first-setup) |
-[Network features](#network-features) | [Security notes](#security-notes) |
+[Network features](#network-features) | [Regions on a repeater](#regions-on-a-repeater) |
+[Security notes](#security-notes) |
 [Differences from MeshCore](#differences-from-meshcore) | [Commands](#commands) |
 [Building from source](#building-from-source) | [Release channels](#release-channels) |
 [Development](#development) | [Licence and credits](#licence-and-credits)
@@ -352,6 +353,33 @@ it. Running `net ota start` again while a session runs only restarts the timeout
 
 MeshCore's own `start ota` is unchanged and still available: it opens the `MeshCore-OTA`
 access point. It is refused while WiFi is on or while a `net ota` session runs.
+
+## Regions on a repeater
+
+Messages can be sent with a scope (a region such as `pl`); the MeshNomad app sets it per
+channel. A repeater forwards such a message only when that region is in its own region map;
+a repeater without regions forwards unscoped messages only, and ignores scoped traffic in
+an area that uses scopes. This is MeshCore behaviour. Add the regions your area uses, on
+the repeater's console (USB, network console, the app's node console or remote admin):
+
+```
+region put pl
+region save
+region
+```
+
+`region` then lists `*` (unscoped) and `pl`, each with `F` when flooding is allowed. Without
+`region save` a change is lost at the next restart.
+
+Do not send `region load` over LoRa or from the app. It starts an interactive bulk load:
+every following command line, from any console, is taken as a region definition and gets
+no reply, until a line of only spaces ends the load and replaces the whole map with the
+lines entered. The MeshNomad app adds its own prefix to every command, so it cannot send
+such a line: the node then ignores every command from it until a single space is sent from
+another MeshCore console, an empty line is typed on its USB console, or it restarts. The
+other region commands (`remove`, `allowf`, `denyf`, `home`, `default`, `list allowed`,
+`list denied`, `get`) are described in MeshCore's
+[CLI reference](https://github.com/meshcore-dev/MeshCore/blob/main/docs/cli_commands.md#region-management-v110).
 
 ## Security notes
 
