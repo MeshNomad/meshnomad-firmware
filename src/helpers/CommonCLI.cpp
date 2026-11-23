@@ -6,6 +6,7 @@
 #include <RTClib.h>
 #include <helpers/sensors/LPPDataHelpers.h>
 #include <helpers/MeshNomadFeatures.h>
+#include <helpers/GpsStatus.h>
 
 #ifndef BRIDGE_MAX_BAUD
 #define BRIDGE_MAX_BAUD 115200
@@ -467,15 +468,8 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
         bool enabled = l->isEnabled(); // is EN pin on ?
         bool fix = l->isValid();       // has fix ?
         int sats = l->satellitesCount();
-        bool active = !strcmp(_sensors->getSettingByKey("gps"), "1");
-        if (enabled) {
-          sprintf(reply, "on, %s, %s, %d sats",
-            active?"active":"deactivated",
-            fix?"fix":"no fix",
-            sats);
-        } else {
-          strcpy(reply, "off");
-        }
+        // MeshNomad B88: the `gps` setting is absent (NULL) when no module was detected
+        mesh::formatGpsStatus(reply, 160, enabled, _sensors->getSettingByKey("gps"), fix, sats);
       } else {
         strcpy(reply, "Can't find GPS");
       }
