@@ -315,8 +315,6 @@ void NetServices::ntpLoop() {
 // 5 minutes (the socket is then closed before any handshake). While the admin
 // password is still the compiled default the console refuses every login (gate).
 static const unsigned long LOGIN_DEADLINE_MS = 15000UL;
-static const uint8_t       LOGIN_MAX_FAILS   = 3;
-static const unsigned long LOGIN_LOCKOUT_MS  = 300000UL;
 static const uint32_t      CLI_HANDSHAKE_MS  = 4000;      // loop() is blocked at most this long
 static const size_t        CLI_MIN_HEAP_OTA  = 48 * 1024; // console refused below this while net ota runs
 static const char* const   PW_GATE_MSG = "Error: change the admin password first (password <new>)";
@@ -334,54 +332,24 @@ bool NetServices::adminPasswordIsDefault() const {
   return _default_password && strcmp(pw, _default_password) == 0;
 }
 
-// Unlocked core; the table is shared with the httpd task (NetOta), so every entry
-// point goes through the lockout*() wrappers below.
-NetServices::LoginFail* NetServices::loginFailEntry(uint32_t ip, bool create) {
-  LoginFail* oldest = &_login_fail[0];
-  for (LoginFail& e : _login_fail) {
-    if (e.count > 0 && e.ip == ip) return &e;
-    if (e.count == 0 || e.last_ms < oldest->last_ms) oldest = &e;
-  }
-  if (!create) return nullptr;
-  *oldest = {ip, 0, millis()};
-  return oldest;
-}
-
-bool NetServices::isLockedOut(uint32_t ip) {
-  LoginFail* e = loginFailEntry(ip, false);
-  if (!e) return false;
-  if (millis() - e->last_ms >= LOGIN_LOCKOUT_MS) {   // expired: forget the failures
-    e->count = 0;
-    return false;
-  }
-  return e->count >= LOGIN_MAX_FAILS;
-}
-
-void NetServices::recordLoginFailure(uint32_t ip) {
-  LoginFail* e = loginFailEntry(ip, true);
-  if (millis() - e->last_ms >= LOGIN_LOCKOUT_MS) e->count = 0;
-  if (e->count < 255) e->count++;
-  e->last_ms = millis();
-}
-
-// Thread-safe wrappers (portMUX critical section: no blocking calls inside).
+// The table is shared with the httpd task (NetOta), so every entry point takes the lock.
+// portMUX critical section: no blocking calls inside.
 bool NetServices::lockoutCheck(uint32_t ip) {
   portENTER_CRITICAL(&_lockout_mux);
-  bool locked = isLockedOut(ip);
+  bool locked = _lockout.isLocked(ip, millis());
   portEXIT_CRITICAL(&_lockout_mux);
   return locked;
 }
 
 void NetServices::lockoutFail(uint32_t ip) {
   portENTER_CRITICAL(&_lockout_mux);
-  recordLoginFailure(ip);
+  _lockout.fail(ip, millis());
   portEXIT_CRITICAL(&_lockout_mux);
 }
 
 void NetServices::lockoutOk(uint32_t ip) {
   portENTER_CRITICAL(&_lockout_mux);
-  LoginFail* e = loginFailEntry(ip, false);
-  if (e) e->count = 0;
+  _lockout.ok(ip);
   portEXIT_CRITICAL(&_lockout_mux);
 }
 

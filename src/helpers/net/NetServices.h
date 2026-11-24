@@ -23,6 +23,7 @@
   #include "NetTls.h"        // TLS console; empty in the companion build
   #include "NetOta.h"        // 'net ota' over HTTPS; empty in the companion build
   #include "WifiRetry.h"     // 3 bounded attempts, then the radio stays off
+  #include "../LoginLockout.h"  // failed logins per IP (console, net ota)
 #endif
 
 // Snapshot of node telemetry, filled by the role via a callback. Optional fields
@@ -153,20 +154,9 @@ private:
   unsigned long _cli_last_activity = 0;
   unsigned long _cli_connected_at = 0;
   uint32_t      _cli_ip = 0;
-  // Failed logins per client IP: 3 failures lock that IP out for 5 minutes,
-  // other addresses are unaffected. Oldest entry is reused when full.
-  struct LoginFail {
-    uint32_t      ip;
-    uint8_t       count;
-    unsigned long last_ms;
-  };
-  static const int LOGIN_FAIL_SLOTS = 16;   // 16 x 12 B
-  LoginFail _login_fail[LOGIN_FAIL_SLOTS] = {};
-  portMUX_TYPE _lockout_mux = portMUX_INITIALIZER_UNLOCKED;   // guards _login_fail
-  // Unlocked table access; only the lockout*() wrappers may call these.
-  LoginFail* loginFailEntry(uint32_t ip, bool create);
-  bool isLockedOut(uint32_t ip);
-  void recordLoginFailure(uint32_t ip);
+  // Failed logins per client IP (LoginLockout: 3 failures lock that IP out for 5 minutes).
+  LoginLockout _lockout;
+  portMUX_TYPE _lockout_mux = portMUX_INITIALIZER_UNLOCKED;   // guards _lockout
   void ensureTls();             // key/cert present once WiFi is up
   void applyTcpState();         // start/stop the listener to match the config
   void cliLoop();
