@@ -39,7 +39,7 @@ jobs:
         uses: ./.github/actions/setup-build-environment
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           languages: c-cpp
           build-mode: manual
@@ -50,6 +50,6 @@ jobs:
         run: pio run -e heltec_v4_mn_rpt -e heltec_v4_mn_cmp -e heltec_v4_mn_rs
 
       - name: Analyze
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           category: /language:c-cpp
