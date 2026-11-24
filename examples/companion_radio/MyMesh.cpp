@@ -6,6 +6,9 @@
 #endif
 #include <Mesh.h>
 #include <helpers/MeshNomadFeatures.h>
+#ifdef MN_TCP_AUTH
+  #include <helpers/wifi/SerialWifiAuthInterface.h>   // get tcp.status
+#endif
 #ifdef WITH_NET_SERVICES
 #include <helpers/net/NetHooks.h>
 #endif
@@ -2197,6 +2200,54 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     }
     return true;
   }
+#ifdef MN_TCP_AUTH
+  // MeshNomad (B89): login for the TCP link; changes apply at the next login, an open
+  // session stays. The password is never echoed.
+  if (memcmp(command, "set tcp.password ", 17) == 0) {
+    if (!tcpPasswordValid(&command[17])) {
+      strcpy(reply, "Error, 8-63 printable ASCII characters");
+    } else {
+      StrHelper::strncpy(_prefs.tcp_pwd, &command[17], sizeof(_prefs.tcp_pwd));
+      savePrefs();
+      strcpy(reply, "> tcp.password updated");
+    }
+    return true;
+  }
+  if (strcmp(command, "get tcp.password") == 0) {
+    strcpy(reply, _prefs.tcp_pwd[0] ? "> (set)" : "> (not set)");
+    return true;
+  }
+  if (strcmp(command, "set tcp.clear") == 0) {
+    memset(_prefs.tcp_pwd, 0, sizeof(_prefs.tcp_pwd));
+    savePrefs();
+    strcpy(reply, "> tcp.password cleared");
+    return true;
+  }
+  if (memcmp(command, "set tcp.auth ", 13) == 0) {
+    const char* v = &command[13];
+    if ((v[0] == '0' || v[0] == '1') && v[1] == 0) {
+      _prefs.tcp_auth = v[0] - '0';
+      savePrefs();
+      sprintf(reply, "> tcp.auth is now %d", _prefs.tcp_auth);
+    } else {
+      strcpy(reply, "Error, must be 0 or 1");
+    }
+    return true;
+  }
+  if (strcmp(command, "get tcp.auth") == 0) {
+    sprintf(reply, "> %d", _prefs.tcp_auth ? 1 : 0);
+    return true;
+  }
+  if (strcmp(command, "get tcp.status") == 0) {
+    char st[96];
+    if (SerialWifiAuthInterface::status(st, sizeof(st))) {
+      sprintf(reply, "> %s", st);
+    } else {
+      strcpy(reply, "> wifi off");
+    }
+    return true;
+  }
+#endif
 #endif
 
   if (strcmp(command, "get features") == 0) {  // MeshNomad: compiled-in features for the app

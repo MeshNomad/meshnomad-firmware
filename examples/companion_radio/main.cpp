@@ -61,7 +61,12 @@ MultiSerialInterface interface_manager;
   #ifndef WIFI_RETRY_TIMEOUT
     #define WIFI_RETRY_TIMEOUT 5000     // RP2040: cap on how long one join may block loop()
   #endif
-  #if defined(ESP32) || defined(RP2040_PLATFORM)
+  #include <helpers/wifi/TcpAuthGate.h>
+  #if defined(MN_TCP_AUTH)
+    // MeshNomad: TCP link with a login (tcp.password / tcp.auth), firmware B89
+    #include <helpers/wifi/SerialWifiAuthInterface.h>
+    SerialWifiAuthInterface wifi_interface;
+  #elif defined(ESP32) || defined(RP2040_PLATFORM)
     #include <helpers/wifi/SerialWifiInterface.h>
     SerialWifiInterface wifi_interface;
   #else
@@ -252,6 +257,11 @@ void setup() {
 #else
     WiFi.begin(wifi_ssid, wifi_pwd);
 #endif
+  #if defined(MN_TCP_AUTH)
+    // read on every login, so a change applies without a restart
+    wifi_interface.setAuth([]() -> const char* { return the_mesh.getNodePrefs()->tcp_pwd; },
+                           []() -> bool { return the_mesh.getNodePrefs()->tcp_auth != 0; });
+  #endif
     wifi_interface.begin(TCP_PORT);
     interface_manager.addInterface(InterfaceType::WiFi, &wifi_interface);
   } else {

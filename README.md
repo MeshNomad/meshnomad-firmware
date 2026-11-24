@@ -80,8 +80,9 @@ One firmware per board and role. Everything below is off until you turn it on.
   builds (on a few boards its Bluetooth build also has WiFi, never USB).
 - Pairs with PIN `123456` on every board. A PIN set with `set pin` or in the app
   still takes precedence.
-- WiFi settings and the app connection over WiFi work exactly as in MeshCore: the
-  settings apply after a reboot and the app talks to the companion on port 5000.
+- WiFi settings work as in MeshCore (they apply after a reboot) and the app talks to the
+  companion on port 5000, but the TCP link needs a password (`set tcp.password`, see
+  [Companion TCP login](#companion-tcp-login)). In MeshCore anyone on the network can connect.
 - MQTT telemetry, NTP and the observer as on the other roles. No network console, no
   `net ota` and no observer uplinks: the companion is updated over USB.
 - Its USB port speaks the app protocol, not text, so there is no serial console. Commands
@@ -412,6 +413,7 @@ To report a vulnerability or to verify a downloaded firmware file, see
 | Companion Bluetooth PIN | random at every start on boards with a display | `123456` everywhere; `set pin` overrides |
 | WiFi | companion: app connection; repeater and room server: only the `start ota` access point | all roles join your network; repeater and room server apply it at once |
 | Network console | none | TLS on port 5000, admin password, repeater and room server |
+| Companion app link over TCP | open to anyone on the network | password login (`tcp.password`), 5-minute lockout after 3 wrong passwords |
 | Firmware update over WiFi | `start ota` access point | `net ota` from a browser, plus `start ota` unchanged |
 | MQTT, NTP, observer | none | all roles, off by default |
 | Packets to public analyzers | a host computer with meshcoretomqtt next to the node | observer uplinks on the node itself: up to 3 brokers, signed login, repeater and room server, off by default |
@@ -451,7 +453,7 @@ Roles: `sensor read` and `sensor scan` on repeater and room server; `get feature
 |---|---|---|
 | `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
-| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; a companion reports `tcp.auth` (TCP login); `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
 | `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
 
 ### WiFi
@@ -471,6 +473,36 @@ commands and apply after a reboot; on the other roles they apply at once.
 | `net wifi retry` | Starts the 3 connect attempts again, for example after the attempts failed. Repeater and room server. | | |
 | `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. WiFi on the repeater and room server: `off`, `no ssid`, `try <n>/3(wl=<code>)`, `wait <n>/3` (radio off between attempts), `failed` (radio off, see `net wifi retry`), `connected`. WiFi on the companion: `off` (not started at boot; a changed `wifi.enabled` applies after a restart), `connecting(wl=<code>)`, `connected`. | | |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot (uplink settings `obsN.*` apply at once anyway). | | |
+
+### Companion TCP login
+
+Roles: companion. The TCP link on port 5000 (WiFi) asks for a password before any app
+frame; Bluetooth and USB do not. Set the password over Bluetooth or USB. Until a password
+is set, the companion refuses every TCP connection (`tcp.auth` is on from the first
+update). Changes apply at the next login; an open TCP session stays. A new connection
+does not drop the logged-in app until it has logged in itself. 3 wrong passwords lock
+that client IP out for 5 minutes; a connection that does not log in within 15 s is closed
+without counting.
+
+| Command | What it does | Values | Default |
+|---|---|---|---|
+| `set tcp.password <password>` | Password of the TCP link; `get tcp.password` replies `(set)` or `(not set)`, never the password. | 8 to 63 printable ASCII characters | empty |
+| `set tcp.clear` | Empties the password; with `tcp.auth 1` TCP is then refused. | | |
+| `get/set tcp.auth <0\|1>` | `1`: login required. `0`: open to anyone on the network, as in MeshCore. | `0`, `1` | `1` |
+| `get tcp.status` | `> auth:on pwd:set client:<ip>\|none fails:<n> locked:<n>`: failed logins since boot and client IPs locked now. | | |
+
+Protocol for other clients, inside the usual frames (`<` + u16 LE length to the radio,
+`>` + u16 LE length from it):
+
+| Direction | Payload | Meaning |
+|---|---|---|
+| to the radio | `F0 01 01` | HELLO, protocol version 1; send it first |
+| from the radio | `F0 01 01` + 16-byte nonce | Login required; also the reply to any other frame before the login (that frame is dropped) |
+| to the radio | `F0 02` + 32 bytes | HMAC-SHA256 with the password as key over `MNTCP1` followed by the nonce |
+| from the radio | `F0 03 <status>` | `00` logged in (also the reply to HELLO with `tcp.auth 0`), `01` wrong password, `02` IP locked out, `03` no password set, `04` login timeout; any status but `00` closes the connection |
+
+A firmware without the login answers HELLO with `01 01` (unsupported command). The
+password does not cross the network, but after the login the traffic is not encrypted.
 
 ### Network console and certificate
 

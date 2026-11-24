@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "wifi/TcpAuthGate.h"   // MN_TCP_AUTH
 
 // MeshNomad: the build env (`<board>_mn_<role>`) for `get build`, set by build.sh, so the app
 // can tell which firmware file fits this device.
@@ -21,6 +22,9 @@ inline void meshnomadFeatures(char* out, size_t n) {
   };
 #if defined(ENABLE_WIFI_INTERFACE) || defined(WITH_NET_SERVICES)
   add("wifi");
+#endif
+#ifdef MN_TCP_AUTH
+  add("tcp.auth");   // companion TCP link with a login (tcp.password, tcp.auth)
 #endif
 #ifdef WITH_NET_SERVICES
   add("mqtt"); add("ntp");

@@ -3,6 +3,7 @@
 #include <helpers/ConfigSerializer.h>
 #include <helpers/CommonRadioPrefs.h>
 #include <helpers/DynamicConfigSerializer.h>
+#include <helpers/wifi/TcpAuthGate.h>   // MN_TCP_AUTH
 
 #define TELEM_MODE_DENY            0
 #define TELEM_MODE_ALLOW_FLAGS     1     // use contact.flags
@@ -59,6 +60,10 @@ public:
   char wifi_ssid[33] = {0};   // if empty, the compile-time WIFI_SSID is used
   char wifi_pwd[64] = {0};
   uint8_t wifi_enabled = 1; // enabled by default to allow wifi only builds to work. wifi won't be started if ssid is empty
+#ifdef MN_TCP_AUTH
+  char tcp_pwd[64] = {0};   // MeshNomad: password of the TCP link ("" = TCP refused while tcp_auth is on)
+  uint8_t tcp_auth = 1;     // MeshNomad: 1 = TCP login required (default), 0 = open as in MeshCore
+#endif
   // use ssid from prefs, or fallback to ssid from build flags
   const char* getWifiSSID() const { return wifi_ssid[0] ? wifi_ssid : WIFI_SSID; }
 #endif
@@ -186,6 +191,10 @@ private:
       def("ssid", _parent->wifi_ssid, sizeof(_parent->wifi_ssid));
       def("pwd", _parent->wifi_pwd, sizeof(_parent->wifi_pwd));
       def("enabled", _parent->wifi_enabled);
+#ifdef MN_TCP_AUTH
+      def("tcp_pwd", _parent->tcp_pwd, sizeof(_parent->tcp_pwd));
+      def("tcp_auth", _parent->tcp_auth);
+#endif
     }
   public:
     WiFiPrefs(NodePrefs* parent) : _parent(parent) { }
