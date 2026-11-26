@@ -52,27 +52,25 @@ void SerialWifiAuthInterface::writeRaw(WiFiClient& c, const uint8_t* payload, si
   c.write(pkt, 3 + len);
 }
 
-// Same rules as SerialWifiInterface::checkRecvFrame(): 3-byte header ('<', u16 LE length),
-// frames of another type or longer than the limit (here MAX_FRAME_SIZE + tag) are skipped.
+// 3-byte header ('<', u16 LE length) as in SerialWifiInterface::checkRecvFrame(). B90: a header
+// of another type or with a length over the limit (here MAX_FRAME_SIZE + tag) closes this client
+// at once: waiting for that many bytes could never end (larger than the socket buffer) and the
+// stream has no way to find the next frame. The app reconnects.
 size_t SerialWifiAuthInterface::FrameReader::read(WiFiClient& c, uint8_t dest[]) {
   if (type == 0 || length == 0) {
     if (c.available() < 3) return 0;
     c.readBytes(&type, 1);
     c.readBytes((uint8_t*)&length, 2);
     if (type == 0 || length == 0) { reset(); return 0; }
+    if (type != '<' || length > TCP_WIRE_MAX) {
+      WIFI_DEBUG_PRINTLN("bad frame header, client closed");
+      c.stop();
+      reset();
+      return 0;
+    }
   }
   int frame_length = length;
   if (frame_length > c.available()) return 0;   // wait for the rest
-  if (frame_length > (int)TCP_WIRE_MAX || type != '<') {
-    while (frame_length > 0) {
-      uint8_t skip[1];
-      int skipped = c.read(skip, 1);
-      if (skipped <= 0) break;
-      frame_length -= skipped;
-    }
-    reset();
-    return 0;
-  }
   c.readBytes(dest, frame_length);
   reset();
   return frame_length;

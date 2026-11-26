@@ -1,4 +1,7 @@
 #include "ArduinoSerialInterface.h"
+#ifdef MESHNOMAD_BUILD
+  #include "SerialFrameGuard.h"
+#endif
 
 #define RECV_STATE_IDLE        0
 #define RECV_STATE_HDR_FOUND   1
@@ -48,9 +51,20 @@ size_t ArduinoSerialInterface::writeFrame(const uint8_t src[], size_t len) {
 }
 
 size_t ArduinoSerialInterface::checkRecvFrame(uint8_t dest[]) {
+#ifdef MESHNOMAD_BUILD
+  // B90: a frame that stopped arriving (cut by a reset, a lost byte) is dropped after a gap,
+  // so the next frame is read again instead of being taken as its missing bytes.
+  if (_state != RECV_STATE_IDLE && _serial->available() &&
+      mesh::serialFrameStale(millis(), _last_byte_at)) {
+    _state = RECV_STATE_IDLE;
+  }
+#endif
   while (_serial->available()) {
     int c = _serial->read();
     if (c < 0) break;
+#ifdef MESHNOMAD_BUILD
+    _last_byte_at = millis();
+#endif
 
     switch (_state) {
       case RECV_STATE_IDLE:
@@ -65,7 +79,14 @@ size_t ArduinoSerialInterface::checkRecvFrame(uint8_t dest[]) {
       case RECV_STATE_LEN1_FOUND:
         _frame_len |= ((uint16_t)c) << 8;   // MSB
         rx_len = 0;
+#ifdef MESHNOMAD_BUILD
+        // B90: a length no app frame can have (0 or over MAX_FRAME_SIZE, e.g. 3C FF FF) is not
+        // waited for: the frame is dropped and the next '<' starts a new one.
+        _state = mesh::serialFrameLengthOk(_frame_len, MAX_FRAME_SIZE) ? RECV_STATE_LEN2_FOUND
+                                                                        : RECV_STATE_IDLE;
+#else
         _state = _frame_len > 0 ? RECV_STATE_LEN2_FOUND : RECV_STATE_IDLE;
+#endif
         break;
       default:
         if (rx_len < MAX_FRAME_SIZE) {

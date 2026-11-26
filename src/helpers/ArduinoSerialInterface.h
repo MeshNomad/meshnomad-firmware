@@ -12,6 +12,7 @@ class ArduinoSerialInterface : public BaseSerialInterface {
   uint8_t rx_buf[MAX_FRAME_SIZE];
 #ifdef MESHNOMAD_BUILD
   unsigned long _last_frame_at = 0;  // millis() of the last complete frame from the app
+  unsigned long _last_byte_at = 0;   // millis() of the last byte read (B90 gap timeout)
 #endif
 
 public:
