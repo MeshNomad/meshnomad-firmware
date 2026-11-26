@@ -1,0 +1,17 @@
+{
+  "note": "MeshNomad TCP protocol v2 (B91). Payloads only, without the '<'/'>' + u16 header. X25519 private keys are given before clamping. Ed25519 node key from seed (RFC 8032).",
+  "password": "meshnomad-test",
+  "node_ed25519_seed": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+  "node_pub": "7776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9b",
+  "app_x25519_priv": "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+  "radio_x25519_priv": "404346494c4f5255585b5e6164676a6d707376797c7f8285888b8e9194979a9d",
+  "hello": "f0010223b7bb8c91ae008711fb12846780bcdf1e065f821bdfec49f57e7c7dcd4c4823",
+  "challenge": "f00102c3ceea6dc28f891d8ab39f80e16a8029179a86b21ce1e569e5392baf8b3520497776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9bc37e32ff845d49b961222cce9f86f7ad2300125a86452c779e29a95190fab04a427fada2e58e335e32dd71f2e3a0bef9bbcb7577c64ca9e0b648a5d6f2989306",
+  "th": "62e45ddeaa5798b8b29764c49b7dc9562f6da06c10c9c11cba0a9c182a84bed8",
+  "login_encrypted": "67df42b0aed372b9423879ed5b2f38d2c6de95ed0128ef5f895b790b82898df2dff88fe8cf5e275a562e18519af9dc781753",
+  "result_encrypted": "f47ac4189545eae22dc1eb0847d960fa02f301",
+  "app_frame_plain": "1603",
+  "app_frame_encrypted": "d2da901ed6bce69f74acc533c0bf39d53475",
+  "radio_frame_plain": "0d0a0b",
+  "radio_frame_encrypted": "4b052bbc9f90807553b473366d021a2ba03996"
+}

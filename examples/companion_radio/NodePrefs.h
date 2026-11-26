@@ -3,7 +3,7 @@
 #include <helpers/ConfigSerializer.h>
 #include <helpers/CommonRadioPrefs.h>
 #include <helpers/DynamicConfigSerializer.h>
-#include <helpers/wifi/TcpAuthGate.h>   // MN_TCP_AUTH
+#include <helpers/wifi/TcpAuthConfig.h>   // MN_TCP_AUTH
 
 #define TELEM_MODE_DENY            0
 #define TELEM_MODE_ALLOW_FLAGS     1     // use contact.flags

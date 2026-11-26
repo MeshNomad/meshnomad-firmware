@@ -1,23 +1,23 @@
-#include "TcpAuthGate.h"
+#include "TcpAuthConfig.h"
 #ifdef MN_TCP_AUTH
 
 #include "SerialWifiAuthInterface.h"
-#include <SHA256.h>
 #include <esp_random.h>
 
 SerialWifiAuthInterface* SerialWifiAuthInterface::_instance = nullptr;
 
-static void hmacSha256(const uint8_t* key, size_t key_len, const uint8_t* msg, size_t msg_len,
-                       uint8_t out[TCP_AUTH_HMAC_LEN]) {
-  SHA256 sha;
-  sha.resetHMAC(key, key_len);
-  sha.update(msg, msg_len);
-  sha.finalizeHMAC(key, key_len, out, TCP_AUTH_HMAC_LEN);
+// Hardware RNG; true random while the radio (WiFi) is on, which a TCP link implies.
+static void tcpRandom(uint8_t* out, size_t len) {
+  esp_fill_random(out, len);
 }
 
 void SerialWifiAuthInterface::begin(int port) {
   // WiFi itself is set up outside of this class; this only starts the server
   server.begin(port);
+}
+
+void SerialWifiAuthInterface::setIdentity(const uint8_t pub[32], TcpSignFn sign) {
+  gate.setIdentity(pub, sign, tcpRandom);
 }
 
 void SerialWifiAuthInterface::enable() {
@@ -43,7 +43,8 @@ size_t SerialWifiAuthInterface::writeFrame(const uint8_t src[], size_t len) {
 }
 
 void SerialWifiAuthInterface::writeRaw(WiFiClient& c, const uint8_t* payload, size_t len) {
-  uint8_t pkt[3 + MAX_FRAME_SIZE];
+  uint8_t pkt[3 + TCP_WIRE_MAX];
+  if (len > TCP_WIRE_MAX) return;
   pkt[0] = '>';
   pkt[1] = (len & 0xFF);
   pkt[2] = (len >> 8);
@@ -52,7 +53,7 @@ void SerialWifiAuthInterface::writeRaw(WiFiClient& c, const uint8_t* payload, si
 }
 
 // Same rules as SerialWifiInterface::checkRecvFrame(): 3-byte header ('<', u16 LE length),
-// frames longer than MAX_FRAME_SIZE or of another type are skipped.
+// frames of another type or longer than the limit (here MAX_FRAME_SIZE + tag) are skipped.
 size_t SerialWifiAuthInterface::FrameReader::read(WiFiClient& c, uint8_t dest[]) {
   if (type == 0 || length == 0) {
     if (c.available() < 3) return 0;
@@ -62,7 +63,7 @@ size_t SerialWifiAuthInterface::FrameReader::read(WiFiClient& c, uint8_t dest[])
   }
   int frame_length = length;
   if (frame_length > c.available()) return 0;   // wait for the rest
-  if (frame_length > MAX_FRAME_SIZE || type != '<') {
+  if (frame_length > (int)TCP_WIRE_MAX || type != '<') {
     while (frame_length > 0) {
       uint8_t skip[1];
       int skipped = c.read(skip, 1);
@@ -85,15 +86,22 @@ void SerialWifiAuthInterface::dropPending() {
   pending_ip = 0;
 }
 
+void SerialWifiAuthInterface::endSession() {
+  deviceConnected = false;
+  client.stop();
+  client_rx.reset();
+  client_ip = 0;
+  session.clear();
+  send_queue_len = 0;
+}
+
 void SerialWifiAuthInterface::acceptNew() {
   auto newClient = server.available();
   if (!newClient) return;
   if (!authOn()) {             // MeshCore behaviour: the newest connection is the session
     dropPending();
-    deviceConnected = false;
-    client.stop();
+    endSession();
     client = newClient;
-    client_rx.reset();
     client_ip = (uint32_t)client.remoteIP();
     return;
   }
@@ -101,10 +109,7 @@ void SerialWifiAuthInterface::acceptNew() {
   dropPending();
   pending = newClient;
   pending_ip = (uint32_t)pending.remoteIP();
-  uint8_t nonce[TCP_AUTH_NONCE_LEN];
-  esp_fill_random(nonce, sizeof(nonce));
-  gate.start(nonce, millis());
-  memset(nonce, 0, sizeof(nonce));
+  gate.start(millis());
 }
 
 void SerialWifiAuthInterface::servicePending() {
@@ -112,19 +117,20 @@ void SerialWifiAuthInterface::servicePending() {
   if (!pending.connected()) { dropPending(); return; }
 
   TcpAuthAction a;
-  uint8_t frame[MAX_FRAME_SIZE];
+  uint8_t frame[TCP_WIRE_MAX];
   size_t len = pending_rx.read(pending, frame);
+  uint32_t now = millis();
   if (len > 0) {
-    a = gate.onFrame(frame, len, lockout.isLocked(pending_ip, millis()), password(), hmacSha256);
+    a = gate.onFrame(frame, len, lockout.isLocked(pending_ip, now), password(), now);
   } else {
-    a = gate.onTick(millis());
+    a = gate.onTick(now);
   }
-  if (a.failed_login) lockout.fail(pending_ip, millis());
+  if (a.failed_login) lockout.fail(pending_ip, now);
   if (a.login_ok) lockout.ok(pending_ip);
   if (a.out_len > 0) writeRaw(pending, a.out, a.out_len);
 
-  if (a.kind == TcpAuthAction::SEND_CLOSE) {
-    WIFI_DEBUG_PRINTLN("login refused, status %d", a.out[2]);
+  if (a.kind == TcpAuthAction::SEND_CLOSE || a.kind == TcpAuthAction::CLOSE) {
+    WIFI_DEBUG_PRINTLN("login refused (%d)", (int)a.kind);
     // Unread input at close makes lwIP send a RST, which can drop the RESULT just
     // written (an old app sends several frames at once): read what has arrived first.
     uint8_t skip[32];
@@ -134,11 +140,10 @@ void SerialWifiAuthInterface::servicePending() {
     dropPending();
   } else if (a.kind == TcpAuthAction::ACCEPT) {
     WIFI_DEBUG_PRINTLN("login ok");
-    deviceConnected = false;   // the old session ends here
-    client.stop();
+    endSession();              // the old session ends here
     client = pending;
-    client_rx.reset();
     client_ip = pending_ip;
+    gate.takeChannel(session);
     pending = WiFiClient();
     pending_rx.reset();
     pending_ip = 0;
@@ -154,23 +159,43 @@ size_t SerialWifiAuthInterface::checkRecvFrame(uint8_t dest[]) {
       WIFI_DEBUG_PRINTLN("Got connection");
       deviceConnected = true;
     }
-  } else if (deviceConnected) {
-    deviceConnected = false;
-    client_ip = 0;
+  } else if (deviceConnected || session.ready()) {
+    endSession();
     WIFI_DEBUG_PRINTLN("Disconnected");
   }
   if (!deviceConnected) return 0;
 
   if (send_queue_len > 0) {    // first, the send queue
-    writeRaw(client, send_queue[0].buf, send_queue[0].len);
+    Frame& q = send_queue[0];
+    if (session.ready()) {
+      uint8_t sealed[TCP_WIRE_MAX];
+      if (!session.tx.seal(q.buf, q.len, sealed)) { endSession(); return 0; }
+      writeRaw(client, sealed, q.len + TCP_V2_TAG_LEN);
+    } else {
+      writeRaw(client, q.buf, q.len);
+    }
     send_queue_len--;
     for (int i = 0; i < send_queue_len; i++) send_queue[i] = send_queue[i + 1];
     return 0;
   }
 
-  size_t len = client_rx.read(client, dest);
+  size_t len = 0;
+  uint8_t wire[TCP_WIRE_MAX];                       // dest holds MAX_FRAME_SIZE only
+  size_t wlen = client_rx.read(client, wire);
+  if (wlen == 0) return 0;
+  if (session.ready()) {
+    if (!session.rx.open(wire, wlen, dest, &len)) {   // forged, replayed or out of order
+      WIFI_DEBUG_PRINTLN("bad frame, session closed");
+      endSession();
+      return 0;
+    }
+  } else {
+    if (wlen > MAX_FRAME_SIZE) return 0;              // plain session keeps the old limit
+    memcpy(dest, wire, wlen);
+    len = wlen;
+  }
   if (len > 0 && dest[0] == TCP_AUTH_FRAME) {   // login frames never reach the companion
-    if (tcpAuthIsHello(dest, len)) {           // already logged in, or tcp.auth 0
+    if (tcpAuthIsHello(dest, len) && !session.ready()) {   // tcp.auth 0: plain link
       uint8_t out[3];
       writeRaw(client, out, tcpAuthResultFrame(TCP_AUTH_OK, out));
     }
@@ -188,9 +213,10 @@ bool SerialWifiAuthInterface::status(char* out, size_t n) {
     snprintf(ip, sizeof(ip), "%s", a.toString().c_str());
   }
   uint32_t now = millis();
-  snprintf(out, n, "auth:%s pwd:%s client:%s fails:%lu locked:%d", s->authOn() ? "on" : "off",
-           s->password()[0] ? "set" : "none", ip,
-           (unsigned long)s->lockout.failsSinceBoot(), s->lockout.lockedCount(now));
+  snprintf(out, n, "auth:%s pwd:%s client:%s enc:%s fails:%lu locked:%d",
+           s->authOn() ? "on" : "off", s->password()[0] ? "set" : "none", ip,
+           s->session.ready() ? "on" : "off", (unsigned long)s->lockout.failsSinceBoot(),
+           s->lockout.lockedCount(now));
   return true;
 }
 
