@@ -41,6 +41,20 @@ TEST(NetEpoch, BigBackStep) {
   EXPECT_FALSE(netSteppedBack(NOW, NOW + 100000));
 }
 
+// B85: stored contact times are pulled back at every time from an NTP server, not only after
+// a backward step: a clock that was corrected earlier keeps the old future values otherwise.
+TEST(NetEpoch, ClampContactsOnEveryServerTime) {
+  const uint32_t now = 1795000000UL;   // 2026-11
+  EXPECT_TRUE(netShouldClampContacts(true, now));                 // any server time, stepped or not
+}
+
+TEST(NetEpoch, NoClampWithoutServerOrValidClock) {
+  const uint32_t now = 1795000000UL;
+  EXPECT_FALSE(netShouldClampContacts(false, now));               // time kept from before only
+  EXPECT_FALSE(netShouldClampContacts(true, 1000));               // clock not a real time:
+                                                                 // would pull every contact to 1970
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

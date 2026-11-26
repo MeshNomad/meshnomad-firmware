@@ -32,12 +32,12 @@ static void net_telem(Telemetry& t) {
 }
 
 static void net_set_time(uint32_t epoch, bool from_server) {
-  uint32_t before = rtc_clock.getCurrentTime();
   net_apply_epoch(rtc_clock, epoch, from_server);
   uint32_t now = rtc_clock.getCurrentTime();
-  // The clock came back from the future: contact times written by the old clock would
-  // stay ahead of it.
-  if (netSteppedBack(before, now)) the_mesh.clampFutureContacts(now);
+  // B85: with a server time, contact times ahead of the clock are pulled back to it (a
+  // backward step leaves them in the future, and so does a clock corrected earlier). Only a
+  // contact that changes marks the contacts file for a later write.
+  if (netShouldClampContacts(from_server, now)) the_mesh.clampFutureContacts(now);
 }
 
 void meshnomad_net_setup() {

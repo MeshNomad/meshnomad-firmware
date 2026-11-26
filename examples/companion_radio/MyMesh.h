@@ -116,7 +116,7 @@ public:
 
   const char *getNodeName();
   NodePrefs *getNodePrefs();
-  void clampFutureContacts(uint32_t now);   // MeshNomad: after the clock stepped back
+  void clampFutureContacts(uint32_t now);   // MeshNomad: after a time from an NTP server (B85)
   uint32_t getBLEPin();
   void setBLEPin(uint32_t active_pin);
 

@@ -22,6 +22,14 @@ inline bool netSteppedBack(uint32_t before, uint32_t after) {
   return before > after && before - after > NET_EPOCH_WINDOW_S;
 }
 
+// B85: after a time from an NTP server, pull stored contact times back to now. Not only after
+// a backward step: a clock corrected earlier (another build, GPS, an older step) leaves its
+// future values behind, and they keep the contact sync mark in the future. Never on a clock
+// that is not a real time, or every contact would be set to it.
+inline bool netShouldClampContacts(bool from_server, uint32_t now) {
+  return from_server && now >= NET_EPOCH_MIN;
+}
+
 inline uint32_t netClampLastmod(uint32_t lastmod, uint32_t now) {
   return lastmod > now ? now : lastmod;
 }
