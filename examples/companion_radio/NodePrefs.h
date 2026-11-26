@@ -4,6 +4,7 @@
 #include <helpers/CommonRadioPrefs.h>
 #include <helpers/DynamicConfigSerializer.h>
 #include <helpers/wifi/TcpAuthConfig.h>   // MN_TCP_AUTH
+#include <helpers/net/WifiGuardProbe.h>  // MN_WIFI_GUARD
 
 #define TELEM_MODE_DENY            0
 #define TELEM_MODE_ALLOW_FLAGS     1     // use contact.flags
@@ -63,6 +64,9 @@ public:
 #ifdef MN_TCP_AUTH
   char tcp_pwd[64] = {0};   // MeshNomad: password of the TCP link ("" = TCP refused while tcp_auth is on)
   uint8_t tcp_auth = 1;     // MeshNomad: 1 = TCP login required (default), 0 = open as in MeshCore
+#endif
+#ifdef MN_WIFI_GUARD
+  uint8_t wifi_guard = 1;   // MeshNomad #23: 1 = restart a WiFi link that carries no traffic (default)
 #endif
   // use ssid from prefs, or fallback to ssid from build flags
   const char* getWifiSSID() const { return wifi_ssid[0] ? wifi_ssid : WIFI_SSID; }
@@ -194,6 +198,9 @@ private:
 #ifdef MN_TCP_AUTH
       def("tcp_pwd", _parent->tcp_pwd, sizeof(_parent->tcp_pwd));
       def("tcp_auth", _parent->tcp_auth);
+#endif
+#ifdef MN_WIFI_GUARD
+      def("guard", _parent->wifi_guard);
 #endif
     }
   public:

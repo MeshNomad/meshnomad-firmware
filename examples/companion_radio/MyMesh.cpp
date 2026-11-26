@@ -13,6 +13,9 @@
 #ifdef WITH_NET_SERVICES
 #include <helpers/net/NetHooks.h>
 #endif
+#ifdef MN_WIFI_GUARD
+void meshnomad_wifi_guard_status(char* out, size_t n);   // MeshNomadNet.cpp
+#endif
 
 #define CMD_APP_START                 1
 #define CMD_SEND_TXT_MSG              2
@@ -956,6 +959,11 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
 // MeshNomad: the clock stepped back (NTP); contact times ahead of it are corrected and saved.
 void MyMesh::clampFutureContacts(uint32_t now) {
   if (clampContactsLastmod(now)) dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
+}
+
+void MyMesh::saveAndReboot() {
+  if (dirty_contacts_expiry) saveContacts();   // as CMD_REBOOT
+  board.reboot();
 }
 
 void MyMesh::begin() {
@@ -2246,6 +2254,26 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     } else {
       strcpy(reply, "> wifi off");
     }
+    return true;
+  }
+#endif
+#ifdef MN_WIFI_GUARD
+  // MeshNomad #23: guard for a WiFi link that carries no traffic (MeshNomadNet.cpp).
+  if (memcmp(command, "set wifi.guard ", 15) == 0) {
+    const char* v = &command[15];
+    if ((v[0] == '0' || v[0] == '1') && v[1] == 0) {
+      _prefs.wifi_guard = v[0] - '0';
+      savePrefs();
+      sprintf(reply, "> wifi.guard is now %d", _prefs.wifi_guard);
+    } else {
+      strcpy(reply, "Error, must be 0 or 1");
+    }
+    return true;
+  }
+  if (strcmp(command, "get wifi.guard") == 0) {
+    char st[96];
+    meshnomad_wifi_guard_status(st, sizeof(st));
+    sprintf(reply, "> %s", st);
     return true;
   }
 #endif

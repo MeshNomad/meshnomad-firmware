@@ -454,7 +454,7 @@ Roles: `sensor read` and `sensor scan` on repeater and room server; `get feature
 |---|---|---|
 | `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
-| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; every role reports `mem` (`get mem`); a companion reports `tcp.auth` (TCP login) and `tcp.enc` (encrypted TCP link); `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; every role reports `mem` (`get mem`); a companion reports `tcp.auth` (TCP login), `tcp.enc` (encrypted TCP link) and `wifi.guard`; `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
 | `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
 | `get mem` | RAM in bytes: free internal RAM, the lowest it has been since boot, the largest free block, free PSRAM (`0` = none). Internal RAM is what WiFi, Bluetooth and the network stack need; below a few KB the WiFi link can stop. All roles. | `> internal:33888 low:30212 block:29684 psram:2074475` |
 
@@ -473,6 +473,7 @@ commands and apply after a reboot; on the other roles they apply at once.
 | `get/set wifi.power <dBm>` | Transmit power, applied at once; `0` = chip default. A low value can leave the node connected to WiFi while its own traffic does not get through. | `0` to `20` | `0` |
 | `net scan` | Lists networks in range with their signal, as the board sees them (takes 2 to 3 seconds). Repeater and room server. A scan drops the WiFi link; during a connect attempt it starts the attempts again at 1/3, and within 30 s of connecting it uses up one attempt. | | |
 | `net wifi retry` | Starts the 3 connect attempts again, for example after the attempts failed. Repeater and room server. | | |
+| `get/set wifi.guard <0\|1>` | Companion: guard for a WiFi link that stays connected but carries no traffic. Every 30 s it asks the gateway (ARP); after 3 failures in a row it switches WiFi off and on, after 2 such tries without success it restarts the node once (contacts are saved first). `get` replies `> <0\|1> probes:<n> fails:<n> reconnects:<n> restarts:<n>` (counters since boot, `restarts` since power-on). | `0`, `1` | `1` |
 | `net status` | One line: WiFi, IP, signal, MQTT, NTP, observer, observer packet counters. WiFi on the repeater and room server: `off`, `no ssid`, `try <n>/3(wl=<code>)`, `wait <n>/3` (radio off between attempts), `failed` (radio off, see `net wifi retry`), `connected`. WiFi on the companion: `off` (not started at boot; a changed `wifi.enabled` applies after a restart), `connecting(wl=<code>)`, `connected`. | | |
 | `net apply` | Applies changed `mqtt.*`, `ntp.*` and `obs.*` settings without a reboot (uplink settings `obsN.*` apply at once anyway). | | |
 

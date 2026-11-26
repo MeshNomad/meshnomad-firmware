@@ -30,6 +30,9 @@ inline void meshnomadFeatures(char* out, size_t n) {
   add("tcp.auth");   // companion TCP link with a login (tcp.password, tcp.auth)
   add("tcp.enc");    // ... and an encrypted session, protocol v2 (X25519, ChaCha20-Poly1305)
 #endif
+#if defined(ESP32) && defined(WITH_NET_SERVICES) && defined(NET_WIFI_EXTERNAL) && defined(ENABLE_WIFI_INTERFACE)
+  add("wifi.guard"); // 'set/get wifi.guard': restart a WiFi link that carries no traffic (#23)
+#endif
 #ifdef WITH_NET_SERVICES
   add("mqtt"); add("ntp");
   add("ntp.sync");   // 'net ntp sync': clock set from NTP on demand

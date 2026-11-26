@@ -7,6 +7,9 @@
 #include <helpers/net/NetServices.h>
 #include <helpers/net/NetGlue.h>
 #include <helpers/net/NetEpoch.h>
+#include <helpers/net/WifiGuard.h>
+#include <helpers/net/WifiGuardProbe.h>
+#include <WiFi.h>
 
 static NetServices net;
 
@@ -52,8 +55,37 @@ void meshnomad_net_setup() {
   net.begin(node_id, nullptr, net_telem, net_set_time, nullptr, nullptr);
 }
 
+#ifdef MN_WIFI_GUARD
+// #23: a link that stays associated but carries nothing gets WiFi off and on, and after two
+// such tries one restart of the radio (wifi.guard 0 switches it off).
+static WifiGuard wifi_guard;
+
+static void wifi_guard_loop() {
+  uint32_t now = millis();
+  int r = WifiGuardProbe::poll(now);
+  if (r >= 0) wifi_guard.probeResult(r == 1, now);
+  bool up = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0;
+  switch (wifi_guard.tick(the_mesh.getNodePrefs()->wifi_guard != 0, up, now)) {
+    case WifiGuard::Action::PROBE:     WifiGuardProbe::start((uint32_t)WiFi.gatewayIP(), now); break;
+    case WifiGuard::Action::RECONNECT: WifiGuardProbe::reconnect(); break;
+    case WifiGuard::Action::RESTART:   WifiGuardProbe::countRestart(); the_mesh.saveAndReboot(); break;
+    default: break;
+  }
+}
+
+void meshnomad_wifi_guard_status(char* out, size_t n) {
+  snprintf(out, n, "%d probes:%lu fails:%lu reconnects:%lu restarts:%lu",
+           the_mesh.getNodePrefs()->wifi_guard ? 1 : 0, (unsigned long)wifi_guard.probes(),
+           (unsigned long)wifi_guard.failures(), (unsigned long)wifi_guard.reconnects(),
+           (unsigned long)WifiGuardProbe::restarts());
+}
+#endif
+
 void meshnomad_net_loop() {
   net.loop();
+#ifdef MN_WIFI_GUARD
+  wifi_guard_loop();
+#endif
 }
 
 #endif // WITH_NET_SERVICES
