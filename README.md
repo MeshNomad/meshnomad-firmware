@@ -454,8 +454,9 @@ Roles: `sensor read` and `sensor scan` on repeater and room server; `get feature
 |---|---|---|
 | `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
-| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; a companion reports `tcp.auth` (TCP login) and `tcp.enc` (encrypted TCP link); `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; every role reports `mem` (`get mem`); a companion reports `tcp.auth` (TCP login) and `tcp.enc` (encrypted TCP link); `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
 | `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
+| `get mem` | RAM in bytes: free internal RAM, the lowest it has been since boot, the largest free block, free PSRAM (`0` = none). Internal RAM is what WiFi, Bluetooth and the network stack need; below a few KB the WiFi link can stop. All roles. | `> internal:33888 low:30212 block:29684 psram:2074475` |
 
 ### WiFi
 

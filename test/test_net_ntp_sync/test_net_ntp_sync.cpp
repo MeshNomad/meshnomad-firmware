@@ -37,7 +37,7 @@ TEST(NetNtpSync, FeatureTokenFollowsNtp) {
   char list[96];
   meshnomadFeatures(list, sizeof(list));
   EXPECT_NE(strstr(list, " ntp ntp.sync "), nullptr) << list;
-  EXPECT_STREQ(list, "wifi mqtt ntp ntp.sync observer tls ota.net obsup bridge gps");
+  EXPECT_STREQ(list, "wifi mem mqtt ntp ntp.sync observer tls ota.net obsup bridge gps");
   EXPECT_LT(strlen(list), sizeof(list) - 1);
 }
 

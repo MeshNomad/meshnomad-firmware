@@ -6,6 +6,7 @@
 #include <RTClib.h>
 #include <helpers/sensors/LPPDataHelpers.h>
 #include <helpers/MeshNomadFeatures.h>
+#include <helpers/MemStatus.h>
 #include <helpers/GpsStatus.h>
 
 #ifndef BRIDGE_MAX_BAUD
@@ -744,6 +745,11 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
     sprintf(reply, "> %s", list);
   } else if (strcmp(config, "build") == 0) {  // MeshNomad: build env, e.g. heltec_v4_mn_rpt
     sprintf(reply, "> %s", MESHNOMAD_BUILD_ENV);
+#if defined(ESP32)
+  } else if (strcmp(config, "mem") == 0) {    // MeshNomad: RAM (MemStatus.h)
+    strcpy(reply, "> ");
+    memStatusFormat(&reply[2], 100, memStatusRead());
+#endif
   } else if (memcmp(config, "allow.read.only", 15) == 0) {
     sprintf(reply, "> %s", _prefs->allow_read_only ? "on" : "off");
   } else if (memcmp(config, "flood.advert.interval", 21) == 0) {

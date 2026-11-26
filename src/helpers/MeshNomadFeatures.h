@@ -23,6 +23,9 @@ inline void meshnomadFeatures(char* out, size_t n) {
 #if defined(ENABLE_WIFI_INTERFACE) || defined(WITH_NET_SERVICES)
   add("wifi");
 #endif
+#if defined(ESP32)
+  add("mem");        // 'get mem': internal RAM, lowest since boot, largest block, PSRAM
+#endif
 #ifdef MN_TCP_AUTH
   add("tcp.auth");   // companion TCP link with a login (tcp.password, tcp.auth)
   add("tcp.enc");    // ... and an encrypted session, protocol v2 (X25519, ChaCha20-Poly1305)

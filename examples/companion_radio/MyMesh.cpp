@@ -6,6 +6,7 @@
 #endif
 #include <Mesh.h>
 #include <helpers/MeshNomadFeatures.h>
+#include <helpers/MemStatus.h>
 #ifdef MN_TCP_AUTH
   #include <helpers/wifi/SerialWifiAuthInterface.h>   // get tcp.status
 #endif
@@ -2261,6 +2262,13 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     sprintf(reply, "> %s", MESHNOMAD_BUILD_ENV);
     return true;
   }
+#if defined(ESP32)
+  if (strcmp(command, "get mem") == 0) {    // MeshNomad: RAM (MemStatus.h)
+    strcpy(reply, "> ");
+    memStatusFormat(&reply[2], 100, memStatusRead());
+    return true;
+  }
+#endif
 
   if (strcmp(command, "board") == 0) {
     strcpy(reply, board.getManufacturerName());
