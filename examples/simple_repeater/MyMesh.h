@@ -99,6 +99,9 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
   uint32_t pending_discover_tag;
   unsigned long pending_discover_until;
   bool region_load_active;
+#ifdef MESHNOMAD_BUILD
+  uint32_t region_load_at = 0;   // B87: when the load got its last line
+#endif
   unsigned long dirty_contacts_expiry;
 #if MAX_NEIGHBOURS
   NeighbourInfo neighbours[MAX_NEIGHBOURS];

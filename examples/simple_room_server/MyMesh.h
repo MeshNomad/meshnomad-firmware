@@ -96,6 +96,9 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
   unsigned long next_local_advert, next_flood_advert;
   bool _logging;
   bool region_load_active;
+#ifdef MESHNOMAD_BUILD
+  uint32_t region_load_at = 0;   // B87: when the load got its last line
+#endif
   NodePrefs _prefs;
   TransportKeyStore key_store;
   RegionMap region_map, temp_map;

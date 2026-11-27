@@ -375,12 +375,15 @@ region
 `region` then lists `*` (unscoped) and `pl`, each with `F` when flooding is allowed. Without
 `region save` a change is lost at the next restart.
 
-Do not send `region load` over LoRa or from the app. It starts an interactive bulk load:
-every following command line, from any console, is taken as a region definition and gets
-no reply, until a line of only spaces ends the load and replaces the whole map with the
-lines entered. The MeshNomad app adds its own prefix to every command, so it cannot send
-such a line: the node then ignores every command from it until a single space is sent from
-another MeshCore console, an empty line is typed on its USB console, or it restarts. The
+`region load` works on a local console only (USB, or the node's TCP console). It starts an
+interactive bulk load: every following line typed there is taken as a region definition and
+gets no reply, until a line of only spaces ends the load and replaces the whole map with the
+lines entered. Sent over LoRa it is refused with `Err - region load: local console only`,
+because nobody can end the load from there; in MeshCore, and in MeshNomad up to
+`v1.18.0-meshnomad.6`, it left the node ignoring every command, `reboot` too, until an
+empty line was typed on its USB console or it restarted. While a load is open, commands
+that arrive over LoRa run as usual, and a command from the MeshNomad app (which carries
+the app's prefix) or 5 minutes without a line ends the load with the map unchanged. The
 other region commands (`remove`, `allowf`, `denyf`, `home`, `default`, `list allowed`,
 `list denied`, `get`) are described in MeshCore's
 [CLI reference](https://github.com/meshcore-dev/MeshCore/blob/main/docs/cli_commands.md#region-management-v110).

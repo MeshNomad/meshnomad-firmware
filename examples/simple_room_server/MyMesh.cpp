@@ -1,4 +1,7 @@
 #include "MyMesh.h"
+#ifdef MESHNOMAD_BUILD
+  #include <helpers/RegionLoadGuard.h>
+#endif
 
 #ifdef WITH_NET_SERVICES
 #include <helpers/net/NetHooks.h>
@@ -870,6 +873,9 @@ void MyMesh::startRegionsLoad() {
   memset(load_stack, 0, sizeof(load_stack));
   load_stack[0] = &temp_map.getWildcard();
   region_load_active = true;
+#ifdef MESHNOMAD_BUILD
+  region_load_at = millis();
+#endif
 }
 
 bool MyMesh::saveRegions() {
@@ -904,7 +910,21 @@ void MyMesh::formatPacketStatsReply(char *reply) {
 }
 
 void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply) {
+#ifdef MESHNOMAD_BUILD
+  // B87 (rules: RegionLoadGuard.h): a load takes lines of a local console only, and a line
+  // with the app's prefix or a long silence gives it up with the map unchanged.
   if (region_load_active) {
+    switch (mesh::regionLoadLine(sender_timestamp != 0, mesh::regionLoadHasPrefix(command),
+                                 (uint32_t)(millis() - region_load_at))) {
+      case mesh::REGION_LOAD_ABORT:      region_load_active = false; break;
+      case mesh::REGION_LOAD_DEFINITION: region_load_at = millis(); break;
+      default: break;
+    }
+  }
+  if (region_load_active && sender_timestamp == 0) {
+#else
+  if (region_load_active) {
+#endif
     if (StrHelper::isBlank(command)) {  // empty/blank line, signal to terminate 'load' operation
       region_map = temp_map;  // copy over the temp instance as new current map
       region_load_active = false;
@@ -946,6 +966,14 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     reply += 3;
     command += 3;
   }
+
+#ifdef MESHNOMAD_BUILD
+  // B87: over the mesh nobody can type the blank line that ends a load
+  if (sender_timestamp != 0 && mesh::regionLoadIsStart(command)) {
+    strcpy(reply, "Err - region load: local console only");
+    return;
+  }
+#endif
 
 #ifdef WITH_NET_SERVICES
   // MeshNomad: after the prefix strip, so 'xx|set wifi.ssid ..' from the app reaches the net layer
