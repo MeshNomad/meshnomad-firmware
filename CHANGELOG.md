@@ -5,6 +5,60 @@ tags `rpt-`, `cmp-` and `rs-` followed by the version (see
 [Release channels](README.md#release-channels)). MeshCore's own changes are in the
 [MeshCore releases](https://github.com/meshcore-dev/MeshCore/releases).
 
+## v1.18.0-meshnomad.7 (2026-11-27)
+
+Partition tables unchanged since `.4`: the `.bin` file at `0x10000` updates every board and
+keeps its settings.
+
+After this update a companion refuses every connection over WiFi (TCP) until a TCP password
+is set over Bluetooth or USB (`set tcp.password`), and the app has to support the encrypted
+link; `set tcp.auth 0` brings back the open link of MeshCore. Bluetooth and USB are not
+affected.
+
+### Highlights
+
+- The companion's WiFi (TCP) link has a password and is encrypted: `tcp.auth` (on by
+  default), `tcp.password`, `tcp.clear`; failed logins are locked out like on the repeater's
+  console. `get features` reports `tcp.auth` and `tcp.enc`.
+- WiFi guard on companions (`wifi.guard`, on by default): a link that stays connected but
+  carries no traffic is reconnected, and after two failed reconnects the WiFi radio is
+  restarted once. It was tested against a forced failure only.
+- `region load` sent over LoRa is refused. In MeshCore, and in MeshNomad up to `.6`, it left a
+  repeater or room server ignoring every command, `reboot` too, and the line that ended it
+  replaced the region map.
+- `wifi.power` now works on companions. In `.5` and `.6` the setting was stored but never
+  reached the WiFi driver there; repeaters and room servers were not affected.
+- A clock or contact times that are ahead are corrected as soon as the NTP server answers
+  after a restart. In `.6` the correction ran only once per `ntp.interval` (25 hours by
+  default), so in practice it needed `net ntp sync`.
+- A cut or garbled frame no longer silences a companion's USB or WiFi link until a restart.
+- `get mem` reports free RAM on every role; `gps` no longer crashes a node without a GPS
+  module.
+
+### Features
+
+- WiFi guard restarts a companion link that carries no traffic
+- Get mem reports the board's RAM on every role
+- Encrypted companion TCP link (protocol v2)
+- Password login for the companion TCP link
+
+### Fixes
+
+- Region load is refused from a remote sender and no longer locks the CLI
+- Wifi.power reaches the WiFi driver on a companion
+- Apply the NTP server time at the first reply after a restart
+- Pull future contact times back at every NTP time
+- A cut frame no longer silences the companion USB or TCP link
+- Gps command no longer crashes nodes without a GPS module
+
+### Refactoring
+
+- Share the login lockout table
+
+### Documentation
+
+- Regions on a repeater and the region load lockout
+
 ## v1.18.0-meshnomad.6 (2026-11-15)
 
 The tags `rpt-`, `cmp-` and `rs-v1.18.0-meshnomad.5` exist but have no release: the release
