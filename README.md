@@ -88,12 +88,17 @@ One firmware per board and role. Everything below is off until you turn it on.
   `net ota` and no observer uplinks: the companion is updated over USB.
 - Its USB port speaks the app protocol, not text, so there is no serial console. Commands
   reach a companion from the app, or as remote admin over LoRa from a contact you allowed
-  remote CLI.
+  remote CLI. Bluetooth, USB and WiFi share one message queue: two programs connected to
+  the same companion at once take each other's messages and command replies.
+- WiFi guard: a WiFi link that stays connected but carries no traffic is reconnected, and
+  as the last resort the node restarts once (`wifi.guard`, on by default).
+- A cut or garbled frame on the USB or WiFi link is dropped instead of silencing the link
+  until a restart (see [Companion TCP login](#companion-tcp-login)).
 
 **All roles**
 
 - `get features` tells the app which features this build contains; `get build` tells it
-  which firmware file fits the device.
+  which firmware file fits the device; `get mem` reports free RAM.
 - 2-byte path hash by default on a fresh install (`set path.hash.mode` changes it).
 - INA3221 and INA226 current monitors are also found on I2C address 0x40 (identified by
   their chip ID, so an INA219 on 0x40 still works); INA3221 also on 0x41 and 0x43, so
@@ -205,6 +210,10 @@ again: the chip resets during the erase and the upload fails with
 The steps below use the console: the USB serial port on a repeater or room server, the
 MeshNomad app's node console, or remote admin over LoRa. `get <key>` shows a value,
 `set <key> <value>` changes and saves it.
+
+On boards that connect through the chip's own USB (for example Heltec V4 and T-Beam S3
+Supreme), opening the serial port can restart the board. Wait about ten seconds before
+typing; the first command after that may get no reply, so send it again.
 
 1. Set the admin password. The network console and `net ota` refuse to start while the
    password is empty or still the factory default.
@@ -400,6 +409,11 @@ To report a vulnerability or to verify a downloaded firmware file, see
 - The console and `net ota` refuse every login while the admin password is empty or the
   factory default, and share one lockout table (the login rules in
   [First setup](#first-setup) apply to both).
+- `get prv.key` prints the node's private key. MeshCore answers it on the serial console
+  only, never over LoRa; in MeshNomad the network console is a local console too, so the
+  key can also be read there, after the admin login and over TLS. Anyone who has the admin
+  password and reaches port 5000 can copy the node's identity; keep `tcp.enabled 0` on a
+  network you do not trust.
 - `get wifi.pwd` and `get mqtt.pwd` reply `(set)` or `(not set)`, never the password.
   As in MeshCore, the reply to `password <new>` echoes the new admin password and
   `get guest.password` shows the guest password.
@@ -420,12 +434,15 @@ To report a vulnerability or to verify a downloaded firmware file, see
 | WiFi | companion: app connection; repeater and room server: only the `start ota` access point | all roles join your network; repeater and room server apply it at once |
 | Network console | none | TLS on port 5000, admin password, repeater and room server |
 | Companion app link over TCP | open to anyone on the network, not encrypted | encrypted (X25519, ChaCha20-Poly1305), the node proves its identity, password login (`tcp.password`), 5-minute lockout after 3 wrong passwords |
+| Companion WiFi that is connected but carries no traffic | not noticed | WiFi guard: reconnect, then one restart of the node (`wifi.guard`) |
+| Cut or garbled frame on the companion's USB or TCP link | the link stays silent until a restart | the frame is dropped after 1 s or at once when its length is impossible; on TCP the client is disconnected |
+| `region load` sent over LoRa | locks the node's CLI, `reboot` included; the line that ends it replaces the region map | refused (`Err - region load: local console only`); works on a local console |
 | Firmware update over WiFi | `start ota` access point | `net ota` from a browser, plus `start ota` unchanged |
 | MQTT, NTP, observer | none | all roles, off by default |
 | Packets to public analyzers | a host computer with meshcoretomqtt next to the node | observer uplinks on the node itself: up to 3 brokers, signed login, repeater and room server, off by default |
 | Password replies | `get wifi.pwd` shows the password | `(set)` or `(not set)` for `wifi.pwd`, `mqtt.pwd` and `obsN.pwd` |
 | Sensor commands | `sensor get`, `sensor set` | plus `sensor read`, `sensor scan` |
-| Build information | `ver` | plus `get features`, `get build` |
+| Build information | `ver` | plus `get features`, `get build`, `get mem` |
 | Current monitors | INA226 and INA3221 on their default addresses | also found on 0x40; INA3221 on any address 0x40 to 0x43 |
 | Debug logging | per build | off in every release build |
 
@@ -438,8 +455,14 @@ These tables will move to `docs/cli.md` later.
 
 Where to type them: the USB serial console of a repeater or room server, the network
 console, the MeshNomad app's node console, or remote admin over LoRa. `get <key>` shows
-the current value, `set <key> <value>` changes and saves it. Every reply starts with `> `;
-a refused value starts with `Error`.
+the current value, `set <key> <value>` changes and saves it. Replies to `get` and `set`
+start with `> `; a refused value starts with `Error`. `net status` replies without a prefix,
+and MeshCore's own commands keep their forms (`OK ...`, `Err - ...`).
+
+Over LoRa a repeater or room server answers a command once per timestamp: a command sent
+again with the same timestamp gets an empty reply (MeshCore behaviour), so a client that
+retries has to send a new timestamp. A command that changes something may have run even
+when its reply was lost.
 
 ### Path hash
 
@@ -459,14 +482,15 @@ Roles: `sensor read` and `sensor scan` on repeater and room server; `get feature
 |---|---|---|
 | `sensor read` | Reads every sensor now, one value per line, channel first. `no sensor data` when there is none. | `ch2 temp=21.3C` |
 | `sensor scan` | Lists the I2C addresses that answer on the sensor bus. | `> 2: 0x40 0x76`, `> no I2C devices` |
-| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; every role reports `mem` (`get mem`); a companion reports `tcp.auth` (TCP login), `tcp.enc` (encrypted TCP link) and `wifi.guard`; `gps` appears on boards with a GPS. | `> wifi mqtt ntp ntp.sync observer tls ota.net obsup` |
+| `get features` | What this build contains; the app shows only the matching commands. A repeater or room server reports `tls`, `ota.net` and `obsup` (observer uplinks), a companion does not; every role reports `mem` (`get mem`); a companion reports `tcp.auth` (TCP login), `tcp.enc` (encrypted TCP link) and `wifi.guard`; `gps` appears on boards with a GPS, `bridge` on builds with MeshCore's bridge. | `> wifi mem mqtt ntp ntp.sync observer tls ota.net obsup` |
 | `get build` | Board and role as in the firmware file name; `unknown` when the firmware was not built with `build.sh`. The app uses it to offer the right file. | `> heltec_v4_mn_rpt` |
 | `get mem` | RAM in bytes: free internal RAM, the lowest it has been since boot, the largest free block, free PSRAM (`0` = none). Internal RAM is what WiFi, Bluetooth and the network stack need; below a few KB the WiFi link can stop. All roles. | `> internal:33888 low:30212 block:29684 psram:2074475` |
 
 ### WiFi
 
-Roles: repeater, room server, companion. On the companion these are MeshCore's own
-commands and apply after a reboot; on the other roles they apply at once.
+Roles: repeater, room server, companion. On the companion `wifi.ssid`, `wifi.pwd` and
+`wifi.enabled` are MeshCore's own commands and apply after a reboot; `wifi.power` and
+`wifi.guard` apply at once. On the other roles everything applies at once.
 
 | Command | What it does | Values | Default |
 |---|---|---|---|
@@ -524,7 +548,9 @@ radio, `>` + u16 LE length from it):
 Before step 2 the radio may answer with a plain `F0 03 <status>` and close: `02` IP locked
 out, `03` no password set, `04` login timeout, `05` not a version 2 HELLO. With `tcp.auth 0`
 HELLO gets a plain `F0 03 00` and the link stays plain. A firmware without the login
-answers HELLO with `01 01` (unsupported command). Test vectors:
+answers HELLO with `01 01` (unsupported command). A frame that stops arriving is dropped
+after 1 s without a byte, on USB too; a length of 0 or above 176 is dropped on USB and
+closes the client on TCP. Test vectors:
 `test/vectors/tcp_v2.json`, checked against an independent implementation by
 `tool/meshnomad/check_tcp_v2_vectors.py`.
 

@@ -44,6 +44,25 @@ strings, not line numbers. Inventory from `git diff main --diff-filter=M`.
 | `src/helpers/sensors/EnvironmentSensorManager.h` | `int scanBus(...) override;` | `sensor scan` implementation | Re-add. |
 | `src/helpers/sensors/EnvironmentSensorManager.cpp` | `INA226_ALT`, `MN_INA226_ALT`, `init_ina226_alt`, `query_ina226_alt`, `SENSOR_TABLE` rows for `0x40` | INA226 / INA3221 also on 0x40 (ID-checked) | Re-add the static instance, the two functions and the two table rows; keep order before INA219. |
 | `src/helpers/sensors/EnvironmentSensorManager.cpp` | `EnvironmentSensorManager::scanBus` (end of file) | I2C scan | Re-add the function. |
+| `examples/companion_radio/MyMesh.cpp` | `MemStatus.h`, `SerialWifiAuthInterface.h` includes; `meshnomad_wifi_guard_status` declaration (top) | Headers for `get mem`, `get tcp.status`, `get wifi.guard` | Re-add the includes and the declaration under their `#ifdef`s. |
+| `examples/companion_radio/MyMesh.cpp` | `MyMesh::clampFutureContacts`, `MyMesh::saveAndReboot` | Contact times ahead of an NTP server time are pulled back (B85); restart that saves contacts first (WiFi guard, #23) | Re-add both functions before `MyMesh::begin()`. |
+| `examples/companion_radio/MyMesh.cpp` | `"set tcp.password "`, `"get tcp.password"`, `"set tcp.clear"`, `"set tcp.auth "`, `"get tcp.auth"`, `"get tcp.status"` (`MN_TCP_AUTH`) | CLI of the companion TCP login (B89, B91) | Re-add the block in `handleCommand` next to the WiFi commands. |
+| `examples/companion_radio/MyMesh.cpp` | `"set wifi.guard "`, `"get wifi.guard"` (`MN_WIFI_GUARD`) | WiFi guard switch and counters (#23) | Re-add the block after the TCP login block. |
+| `examples/companion_radio/MyMesh.cpp` | `"get mem"` | RAM report on the companion | Re-add the `#if defined(ESP32)` block next to `get features`. |
+| `examples/companion_radio/MyMesh.h` | `clampFutureContacts`, `saveAndReboot` | Declarations of the two functions above | Re-add in the public section. |
+| `examples/companion_radio/NodePrefs.h` | `TcpAuthConfig.h`, `WifiGuardProbe.h` includes; `tcp_pwd`, `tcp_auth`, `wifi_guard`; `def("tcp_pwd"`, `def("tcp_auth"`, `def("guard"` | Stored settings of the TCP login and the WiFi guard | Re-add the includes, the members and their `def()` lines under `MN_TCP_AUTH` / `MN_WIFI_GUARD`. |
+| `examples/companion_radio/main.cpp` | `SerialWifiAuthInterface wifi_interface;` (`MN_TCP_AUTH`) | TCP link with login and encryption replaces `SerialWifiInterface` | Keep our `#if defined(MN_TCP_AUTH)` branch in front of upstream's interface choice. |
+| `examples/companion_radio/main.cpp` | `wifi_interface.setAuth(`, `wifi_interface.setIdentity(` in `setup()` | Password and switch read at every login; the node key signs each handshake | Re-add before `wifi_interface.begin(TCP_PORT)`. |
+| `examples/simple_repeater/MyMesh.cpp`, `examples/simple_room_server/MyMesh.cpp` | `RegionLoadGuard.h` include; `mesh::regionLoadLine(` at the top of `handleCommand`; `mesh::regionLoadIsStart(command)` after the prefix strip; `region_load_at = millis();` in `startRegionsLoad` | `region load` refused from a remote sender; an open load takes local lines only and ends on an app-prefixed line or 5 min of silence (B87) | Re-add the include and the three `#ifdef MESHNOMAD_BUILD` blocks; the `#else` keeps upstream's `if (region_load_active) {`. |
+| `examples/simple_repeater/MyMesh.h`, `examples/simple_room_server/MyMesh.h` | `uint32_t region_load_at` | Time of the load's last line (B87) | Re-add after `region_load_active`. |
+| `src/helpers/ArduinoSerialInterface.cpp/.h` | `SerialFrameGuard.h` include, `mesh::serialFrameStale(`, `mesh::serialFrameLengthOk(`, `_last_byte_at` | A cut frame is dropped after a 1 s gap, an impossible length at once (B90) | Re-add the include, the member and the three `#ifdef MESHNOMAD_BUILD` blocks in `checkRecvFrame`. |
+| `src/helpers/BaseChatMesh.cpp` | `RtcBootstrap.h` include, `rtcBootstrapWanted(` in `bootstrapRTCfromContacts` | A clock that is already set is not replaced by the newest contact time at boot | Re-add the include and the early return. |
+| `src/helpers/BaseChatMesh.cpp/.h` | `BaseChatMesh::clampContactsLastmod` | Pulls contact times that are ahead of the clock back to it (B85) | Re-add the function and its declaration (protected). |
+| `src/helpers/CommonCLI.cpp` | `MemStatus.h`, `GpsStatus.h` includes | Needed by `get mem` and the `gps` reply | Re-add both includes. |
+| `src/helpers/CommonCLI.cpp` | `mesh::formatGpsStatus(` in the `gps` command | `gps` on a node without a GPS module no longer reads a NULL setting (B88) | Replace upstream's reply code of the plain `gps` command with the call. |
+| `src/helpers/CommonCLI.cpp` | `strcmp(config, "mem")` in `handleGetCmd` | `get mem` on repeater and room server | Re-add the `#if defined(ESP32)` branch in the `get` chain. |
+| `src/helpers/sensors/EnvironmentSensorManager.cpp` | `SENSOR_TABLE` rows `0x41` and `0x43` for `INA3221` | INA3221 on any A0 strapping | Re-add the two `#if TELEM_INA3221_ADDRESS != ...` rows, `0x41` before INA260. |
+| `boards/t_beams3_supreme.json` | `"-DBOARD_HAS_PSRAM"` | 8 MB PSRAM in use on the T-Beam S3 Supreme (companion with WiFi ran out of internal RAM) | Re-add the flag in `extra_flags`. |
 
 ## Build and CI
 
@@ -61,6 +80,11 @@ strings, not line numbers. Inventory from `git diff main --diff-filter=M`.
 | `.github/workflows/firmware-builder.yml` | `concurrency:`, `partition_changes.py`, `body_path: release-notes.md`, release `name:` | Duplicate-tag-push guard, partition diff in release notes, release title | Re-add the three blocks and the title. |
 | `.github/workflows/pr-build-check.yml` | `branches: [dev-meshnomad, main-meshnomad]`, `paths:`, env matrix | PR checks on our branches and our build envs | Keep ours; take only structural upstream changes. |
 | `.github/workflows/run-unit-tests.yml` | `branches: [dev-meshnomad, main-meshnomad]`, `paths-ignore`, no `push:` | Unit tests only on PRs to our branches, skip docs-only | Keep ours. |
+| `platformio.ini` | `test_ignore` in `[env:native]` (`test_tcp_auth_gate`, `test_tcp_secure_channel`); `[env:native_tcp_crypto]` | TCP protocol tests run with the real Crypto and ed25519 libraries, not the mocks | Re-add the `test_ignore` lines and the whole env. |
+| `.github/workflows/firmware-builder.yml` | `permissions:`, `persist-credentials: false`, `actions/attest`, `Determine release notes range`, `git-cliff==2.14.2`, `Assemble release notes`, `generate_release_notes: false` | Least-privilege token, build provenance, release notes from git-cliff since the previous published release; actions pinned by SHA | Keep ours; third-party actions must stay on the repository's allow-list (run tools with `pipx run`). |
+| `.github/workflows/pr-build-check.yml`, `.github/workflows/run-unit-tests.yml` | `permissions: contents: read`, `persist-credentials: false`, `ENVIRONMENT: ${{ matrix.environment }}` | Least-privilege token; no template expansion inside `run:` | Keep ours. |
+| `.github/actions/setup-build-environment/action.yml` | `Unexpected firmware version`, pinned `actions/cache` and `actions/setup-python` | The version string is checked against a strict pattern before it reaches `GITHUB_ENV`; actions pinned by SHA | Keep ours. |
+| `.gitignore` | `.cliffignore` and the other MeshNomad entries at the end | Generated and local files stay out of git | Keep our lines. |
 | `README.md` | whole file | MeshNomad README replaces MeshCore's | Keep ours; do not take upstream README changes. |
 
 ## Deleted upstream files
@@ -70,5 +94,6 @@ A MeshCore merge brings these back; delete them again (operator 2026-10-26, B22/
 | File | Purpose of the deletion | How to re-apply on a MeshCore update |
 |---|---|---|
 | `.github/workflows/github-pages.yml`, `mkdocs.yml`, `docs/docs.md` | No MeshCore documentation site (GitHub Pages / MkDocs) in this repo | Delete again. |
-| `SECURITY.md`, `CONTRIBUTING.md` | MeshCore's version table, reporting channel and contribution rules do not apply to MeshNomad | Delete again. |
+| `CONTRIBUTING.md` | MeshCore's contribution rules do not apply to MeshNomad | Delete again. |
+| `SECURITY.md` | MeshCore's version table and reporting channel do not apply; the file in this repo is MeshNomad's own (since 2026-11-01) | Keep ours; do not take upstream's. |
 | `docs/index.md`, `docs/_stylesheets/`, `docs/_assets/`, `docs/cli_commands.md`, `docs/companion_protocol.md`, `docs/faq.md`, `docs/kiss_modem_protocol.md`, `docs/nrf52_power_management.md`, `docs/number_allocations.md`, `docs/packet_format.md`, `docs/payloads.md`, `docs/qr_codes.md`, `docs/radio_presets.md`, `docs/stats_binary_frames.md`, `docs/terminal_chat_cli.md` | MeshCore documentation (MkDocs leftovers and protocol reference) is not kept in this repo; README links MeshCore's `docs/` on GitHub. `docs/UPSTREAM-HUNKS.md`, `docs/assets/` and `docs/superpowers/` are fork-only and stay. | Delete again (operator 2026-10-26). |

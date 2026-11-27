@@ -78,8 +78,9 @@ def main() -> int:
               "Flash the `-merged.bin` file over USB at 0x0; the node starts with a new identity "
               "and default settings.")
     else:
-        print(f"Partition tables unchanged since {prev}: the `.bin` file at 0x10000 updates "
-              "every board and keeps its settings.")
+        print(f"Partition tables unchanged since {prev}: every board updates with the `.bin` "
+              "file and keeps its settings (`net ota`, or USB at 0x10000 on a node that was never "
+              "updated over the air; otherwise the `-merged.bin` file at 0x0).")
     return 0
 
 

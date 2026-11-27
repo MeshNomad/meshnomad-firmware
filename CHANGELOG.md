@@ -7,8 +7,9 @@ tags `rpt-`, `cmp-` and `rs-` followed by the version (see
 
 ## v1.18.0-meshnomad.7 (2026-11-27)
 
-Partition tables unchanged since `.4`: the `.bin` file at `0x10000` updates every board and
-keeps its settings.
+Partition tables unchanged since `.4`: every board updates with the `.bin` file and keeps its
+settings (`net ota`, or USB at `0x10000` on a node that was never updated over the air;
+otherwise the `-merged.bin` file at `0x0`).
 
 After this update a companion refuses every connection over WiFi (TCP) until a TCP password
 is set over Bluetooth or USB (`set tcp.password`), and the app has to support the encrypted
@@ -21,8 +22,8 @@ affected.
   default), `tcp.password`, `tcp.clear`; failed logins are locked out like on the repeater's
   console. `get features` reports `tcp.auth` and `tcp.enc`.
 - WiFi guard on companions (`wifi.guard`, on by default): a link that stays connected but
-  carries no traffic is reconnected, and after two failed reconnects the WiFi radio is
-  restarted once. It was tested against a forced failure only.
+  carries no traffic is reconnected, and after two failed reconnects the node restarts
+  once (contacts are saved first). It was tested against a forced failure only.
 - `region load` sent over LoRa is refused. In MeshCore, and in MeshNomad up to `.6`, it left a
   repeater or room server ignoring every command, `reboot` too, and the line that ended it
   replaced the region map.
@@ -65,8 +66,9 @@ The tags `rpt-`, `cmp-` and `rs-v1.18.0-meshnomad.5` exist but have no release: 
 workflow could not start on them, and release tags cannot be moved. `.6` contains everything
 that was meant for `.5`.
 
-Partition tables unchanged since `.4`: the `.bin` file at `0x10000` updates every board and
-keeps its settings.
+Partition tables unchanged since `.4`: every board updates with the `.bin` file and keeps its
+settings (`net ota`, or USB at `0x10000` on a node that was never updated over the air;
+otherwise the `-merged.bin` file at `0x0`).
 
 ### Highlights
 
