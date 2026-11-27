@@ -268,6 +268,8 @@ through Home Assistant discovery, so they appear in Home Assistant without manua
 
 `set ntp.enabled 1` sets the node's clock from `ntp.server` (UTC) and refreshes it every
 `ntp.interval` seconds, so a node without a GPS keeps the right time across reboots.
+After a restart the server's time is applied as soon as the server answers, not only at
+the next `ntp.interval`.
 Once the server has answered, its time replaces the node's clock even when the clock was
 far off or ahead (for example after a wrong time reached it); on a companion, contact
 times that were ahead of the corrected clock are pulled back to it. After such a step

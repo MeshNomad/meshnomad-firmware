@@ -41,6 +41,21 @@ TEST(NetNtpSync, FeatureTokenFollowsNtp) {
   EXPECT_LT(strlen(list), sizeof(list) - 1);
 }
 
+// B85: a boot starts with a clock restored from before, so the first pass applies it without a
+// server reply; the server's time must then be applied when its first reply comes, not one
+// ntp.interval (25 h by default) later.
+TEST(NetNtpSync, FirstServerReplyIsAppliedAtOnce) {
+  EXPECT_TRUE(netNtpApplyDue(true, 0, 90000000UL));
+  EXPECT_TRUE(netNtpApplyDue(true, 5000, 90000000UL));
+}
+
+TEST(NetNtpSync, WithoutANewReplyOnlyTheIntervalApplies) {
+  EXPECT_FALSE(netNtpApplyDue(false, 0, 90000000UL));
+  EXPECT_FALSE(netNtpApplyDue(false, 89999999UL, 90000000UL));
+  EXPECT_TRUE(netNtpApplyDue(false, 90000000UL, 90000000UL));
+  EXPECT_TRUE(netNtpApplyDue(false, 90000001UL, 90000000UL));
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

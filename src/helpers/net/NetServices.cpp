@@ -297,8 +297,13 @@ void NetServices::ntpLoop() {
     return;
   }
 
-  // NTP_SYNCED: SNTP keeps the system time fresh; copy it to the RTC periodically.
-  if (now - _last_ntp_apply_ms >= (unsigned long)_cfg.ntp_interval_s * 1000UL) {
+  // NTP_SYNCED: SNTP keeps the system time fresh; copy it to the RTC periodically, and at
+  // once when the first server reply of this boot arrives (B85: the clock applied above was
+  // only the one kept from before the reset).
+  bool first_reply = !_ntp_real && sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
+  if (first_reply) _ntp_real = true;
+  if (netNtpApplyDue(first_reply, (uint32_t)(now - _last_ntp_apply_ms),
+                     (uint32_t)_cfg.ntp_interval_s * 1000UL)) {
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) _ntp_real = true;
     _set_time((uint32_t)time(nullptr), _ntp_real);
     _last_ntp_apply_ms = now;
