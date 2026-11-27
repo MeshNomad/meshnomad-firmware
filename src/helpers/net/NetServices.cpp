@@ -130,6 +130,7 @@ void NetServices::loop() {
   cliLoop();
   uplinksLoop(true);
 #else
+  applyWifiPower();            // B83: MeshCore's own code runs WiFi here; only the power is ours
   if (WiFi.status() != WL_CONNECTED) {
     ntpStop();
     return;
